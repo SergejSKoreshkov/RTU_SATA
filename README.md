@@ -1,23 +1,29 @@
-# test
+# RTU Image Processing
 
-> An electron-vue project
+#### How to setup
 
-#### Build Setup
+* Install Node.js
+* Install Yarn
+  
+``` bash
+# Step 1 - install dependencies
+yarn
+
+# Step 2 - run development server (hot reload on localhost:9080)
+yarn dev
+```
+
+#### How to build
 
 ``` bash
-# install dependencies
-npm install
-
-# serve with hot reload at localhost:9080
-npm run dev
-
 # build electron application for production
-npm run build
+yarn build
+```
 
 
 # lint all JS/Vue component files in `src/`
+``` bash
 npm run lint
-
 ```
 
 ---

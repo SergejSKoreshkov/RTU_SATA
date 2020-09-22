@@ -1,8 +1,8 @@
 {
-  "name": "test",
+  "name": "rtu_image-processing",
   "version": "0.0.1",
-  "author": "Sergejs Koreskovs <sergejskoreshkov@gmail.com>",
-  "description": "An electron-vue project",
+  "author": "Sergejs Koreskovs <SergejSKoreshkov@gmail.com>",
+  "description": "RTU Image Processing works",
   "license": null,
   "main": "./dist/electron/main.js",
   "scripts": {
@@ -19,8 +19,8 @@
     "postinstall": "npm run lint:fix"
   },
   "build": {
-    "productName": "test",
-    "appId": "com.example.yourapp",
+    "productName": "rtu_image-processing",
+    "appId": "com.korssdev.rtuimageprocessing",
     "directories": {
       "output": "build"
     },
