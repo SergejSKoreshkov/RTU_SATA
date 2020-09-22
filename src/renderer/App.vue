@@ -11,5 +11,7 @@
 </script>
 
 <style>
-  /* CSS */
+  #app {
+    margin: 1em;
+  }
 </style>
