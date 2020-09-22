@@ -23,7 +23,10 @@ yarn build
 
 #### Lint all JS/Vue component files in `src/`
 ``` bash
-npm run lint
+yarn lint
+# or with fix
+
+yarn lint:fix
 ```
 
 ---
