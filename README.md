@@ -21,7 +21,7 @@ yarn build
 ```
 
 
-# lint all JS/Vue component files in `src/`
+#### Lint all JS/Vue component files in `src/`
 ``` bash
 npm run lint
 ```
