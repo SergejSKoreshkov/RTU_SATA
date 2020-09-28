@@ -138,11 +138,21 @@ export default {
       return true
     },
     openImage (event) {
-      const canvas = event.target
+      const path = this.getFilePath()
+      if (path.length === 1) {
+        const canvas = event.target
+        if (!canvas) return
+        this.loadFromPathToCanvas(canvas, path[0])
+      } else if (path.length === 2) {
+        this.loadFromPathToCanvas(this.$refs.canvas1, path[0])
+        this.loadFromPathToCanvas(this.$refs.canvas2, path[1])
+      } else {
+        alert('Maximum files allowed: 2')
+      }
+    },
+    loadFromPathToCanvas (canvas, path) {
       const ctx = CONTEXT_WEAKMAP.get(canvas)
-      if (!canvas || !ctx) return
-
-      const [ path ] = this.getFilePath()
+      if (!ctx) return
       this.getImageBase64(path)
         .then(imageBase64 => {
           const image = new Image()
@@ -176,7 +186,7 @@ export default {
       })
     },
     getFilePath () {
-      return dialog.showOpenDialog({ properties: ['openFile'] })
+      return dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })
     }
   }
 }
