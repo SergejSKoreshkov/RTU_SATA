@@ -7,8 +7,13 @@ export default new Router({
   routes: [
     {
       path: '/',
-      name: 'main',
-      component: require('@/components/Main').default
+      name: 'lab1',
+      component: require('@/components/Lab1').default
+    },
+    {
+      path: '/lab2',
+      name: 'lab2',
+      component: require('@/components/Lab2').default
     },
     {
       path: '*',

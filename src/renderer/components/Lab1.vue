@@ -1,5 +1,5 @@
 <template>
-  <div class="mainpage">
+  <div class="lab1">
     <div class="row">
       <div class="col-8">
     <h3>Click on canvas to add image</h3>
@@ -50,7 +50,7 @@ let CONTEXT_WEAKMAP = null
 const HEATMAP_OVERLAY_ALPHA = 0.6
 
 export default {
-  name: 'mainpage',
+  name: 'lab1',
   data () {
     return {
       resultAvgSquareError: 'no data',
