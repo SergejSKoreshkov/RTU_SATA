@@ -24,21 +24,21 @@
                     @click="convertToLAB">LAB</button>
             </div>
             <div class="col-8">
-                <h4>Color System: {{ selectedColorSystem }}</h4>
-                <div class="row">
-                    <div :class="selectedColorSystem === 'RGB' ? 'col-3' : 'col-4'">
+                <h4>Color System: {{ selectedColorSystem || 'Not selected' }}</h4>
+                <div class="row" v-show="selectedColorSystem">
+                    <div :class="selectedColorSystem === 'RGB' ? 'col-6' : 'col-4'">
                         <canvas ref="canvasComponent1" width="200" height="100"></canvas>
                         <h5>{{ (selectedColorSystem === 'RGB' ? 'R: ' : 'L: ') + component1}}</h5>
                     </div>
-                    <div :class="selectedColorSystem === 'RGB' ? 'col-3' : 'col-4'">
+                    <div :class="selectedColorSystem === 'RGB' ? 'col-6' : 'col-4'">
                         <canvas ref="canvasComponent2" width="200" height="100"></canvas>
                         <h5>{{ (selectedColorSystem === 'RGB' ? 'G: ' : 'A: ') + component2}}</h5>
                     </div>
-                    <div :class="selectedColorSystem === 'RGB' ? 'col-3' : 'col-4'">
+                    <div :class="selectedColorSystem === 'RGB' ? 'col-6' : 'col-4'">
                         <canvas ref="canvasComponent3" width="200" height="100"></canvas>
                         <h5>{{ (selectedColorSystem === 'RGB' ? 'B: ' : 'B: ') + component3}}</h5>
                     </div>
-                    <div class="col-3" v-show="selectedColorSystem === 'RGB'">
+                    <div class="col-6" v-show="selectedColorSystem === 'RGB'">
                         <canvas ref="canvasComponent4" width="200" height="100"></canvas>
                         <h5>I: {{component4}}</h5>
                     </div>
@@ -51,13 +51,40 @@
 <script>
 const Jimp = require('jimp')
 const { dialog } = require('electron').remote
+const mathjs = require('mathjs')
 
 let CONTEXT_WEAKMAP = null
 let MAIN_IMAGE_BUFFER = null
+let MAIN_IMAGE_BUFFER_LAB = null
 let LAST_COMPONENT1_BUFFER = null
 let LAST_COMPONENT2_BUFFER = null
 let LAST_COMPONENT3_BUFFER = null
 let LAST_COMPONENT4_BUFFER = null
+
+const M_MATRIX = mathjs.matrix([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]])
+const E = 0.008856
+const K = 903.3
+const Xw = 0.95047
+const Yw = 1.0
+const Zw = 1.08883
+
+const Fx = (x) => {
+  const xw = x / Xw
+  if (xw > E) return Math.pow(xw, 1.0 / 3.0)
+  else return (K * xw + 16.0) / 116.0
+}
+
+const Fy = (y) => {
+  const yw = y / Yw
+  if (yw > E) return Math.pow(yw, 1.0 / 3.0)
+  else return (K * yw + 16.0) / 116.0
+}
+
+const Fz = (z) => {
+  const zw = z / Zw
+  if (zw > E) return Math.pow(zw, 1.0 / 3.0)
+  else return (K * zw + 16.0) / 116.0
+}
 
 export default {
   name: 'lab2',
@@ -113,6 +140,14 @@ export default {
         this.component2 = g
         this.component3 = b
         this.component4 = i
+      } else if (this.selectedColorSystem === 'LAB') {
+        const l = MAIN_IMAGE_BUFFER_LAB.l[pixelCoordinates]
+        const a = MAIN_IMAGE_BUFFER_LAB.a[pixelCoordinates]
+        const b = MAIN_IMAGE_BUFFER_LAB.b[pixelCoordinates]
+
+        this.component1 = l
+        this.component2 = a
+        this.component3 = b
       }
     },
     clearInfo () {
@@ -134,15 +169,106 @@ export default {
     drawLine (context, x, y, width, height) {
       context.beginPath()
       context.strokeStyle = '#FF00FF'
-      context.lineWidth = 3
+      context.lineWidth = 5
       context.moveTo(0, y)
       context.lineTo(width, y)
       context.moveTo(x, 0)
       context.lineTo(x, height)
       context.stroke()
     },
+
+    convertToLAB () {
+      this.loading = true
+      LAST_COMPONENT1_BUFFER = null
+      LAST_COMPONENT2_BUFFER = null
+      LAST_COMPONENT3_BUFFER = null
+      LAST_COMPONENT4_BUFFER = null
+      setTimeout(() => {
+        this.selectedColorSystem = 'LAB'
+        const { width, height } = this.$refs.canvasMain
+
+        const ctxMain = CONTEXT_WEAKMAP.get(this.$refs.canvasMain)
+        const ctxL = CONTEXT_WEAKMAP.get(this.$refs.canvasComponent1)
+        const ctxA = CONTEXT_WEAKMAP.get(this.$refs.canvasComponent2)
+        const ctxB = CONTEXT_WEAKMAP.get(this.$refs.canvasComponent3)
+
+        if (!ctxMain || !ctxL || !ctxA || !ctxB) return
+
+        const bufferMain = ctxMain.getImageData(0, 0, width, height)
+        const bufferL = ctxMain.getImageData(0, 0, width, height)
+        const bufferA = ctxMain.getImageData(0, 0, width, height)
+        const bufferB = ctxMain.getImageData(0, 0, width, height)
+
+        const labBuffer = {
+          l: [],
+          a: [],
+          b: []
+        }
+
+        for (let i = 0; i < bufferMain.data.length; i += 4) {
+          const x = Math.pow(bufferMain.data[i] / 255.0, 2.2)
+          const y = Math.pow(bufferMain.data[i + 1] / 255.0, 2.2)
+          const z = Math.pow(bufferMain.data[i + 2] / 255.0, 2.2)
+
+          const result = mathjs.multiply(M_MATRIX, mathjs.matrix([[x], [y], [z]]))._data
+
+          const L = 116 * Fx(result[0][0]) - 16
+          const A = 500 * (Fx(result[0][0]) - Fy(result[1][0]))
+          const B = 200 * (Fy(result[1][0]) - Fz(result[2][0]))
+
+          labBuffer.l.push(L)
+          labBuffer.a.push(A)
+          labBuffer.b.push(B)
+
+          const l = L * 255 / 100
+          bufferL.data[i] = l
+          bufferL.data[i + 1] = l
+          bufferL.data[i + 2] = l
+          bufferL.data[i + 3] = 255
+
+          const aKoef = (A * 128 / 100)
+          bufferA.data[i] = 128 + aKoef
+          bufferA.data[i + 1] = 128 - aKoef
+          bufferA.data[i + 2] = 128 + aKoef
+          bufferA.data[i + 3] = 255
+
+          const bKoef = (B * 128 / 100)
+          bufferB.data[i] = 128 + bKoef
+          bufferB.data[i + 1] = 128 + bKoef
+          bufferB.data[i + 2] = 128 - bKoef
+          bufferB.data[i + 3] = 255
+        }
+
+        MAIN_IMAGE_BUFFER_LAB = {
+          l: Uint8ClampedArray.from(labBuffer.l),
+          a: Uint8ClampedArray.from(labBuffer.a),
+          b: Uint8ClampedArray.from(labBuffer.b)
+        }
+
+        this.$refs.canvasComponent1.width = width
+        this.$refs.canvasComponent2.width = width
+        this.$refs.canvasComponent3.width = width
+
+        this.$refs.canvasComponent1.height = height
+        this.$refs.canvasComponent2.height = height
+        this.$refs.canvasComponent3.height = height
+
+        ctxL.putImageData(bufferL, 0, 0)
+        ctxA.putImageData(bufferA, 0, 0)
+        ctxB.putImageData(bufferB, 0, 0)
+        this.loading = false
+
+        LAST_COMPONENT1_BUFFER = bufferL
+        LAST_COMPONENT2_BUFFER = bufferA
+        LAST_COMPONENT3_BUFFER = bufferB
+      }, 0)
+    },
     convertToRGB () {
       this.loading = true
+      LAST_COMPONENT1_BUFFER = null
+      LAST_COMPONENT2_BUFFER = null
+      LAST_COMPONENT3_BUFFER = null
+      LAST_COMPONENT4_BUFFER = null
       this.selectedColorSystem = 'RGB'
       const ctxMain = CONTEXT_WEAKMAP.get(this.$refs.canvasMain)
       const ctxR = CONTEXT_WEAKMAP.get(this.$refs.canvasComponent1)
@@ -200,9 +326,6 @@ export default {
       LAST_COMPONENT2_BUFFER = bufferG
       LAST_COMPONENT3_BUFFER = bufferB
     },
-    convertToLAB () {
-      this.selectedColorSystem = 'LAB'
-    },
     convertToGrayscale (canvas, context, imageData, width, height) {
       for (let i = 0; i < imageData.data.length; i += 4) {
         const intensity = parseInt(0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2])
@@ -249,11 +372,16 @@ export default {
         b: Uint8ClampedArray.from(b),
         i: Uint8ClampedArray.from(intensity)
       }
+      this.loading = false
     },
     openImage (event) {
       const path = this.getFilePath()
+      this.loading = true
       const canvas = event.target
-      if (!canvas) return
+      if (!canvas) {
+        this.loading = false
+        return
+      }
       this.loadFromPathToCanvas(canvas, path[0])
     },
     loadFromPathToCanvas (canvas, path) {
@@ -270,7 +398,10 @@ export default {
             this.copyMainImageBuffer(canvas, ctx)
           }
         })
-        .catch(e => console.error(e))
+        .catch(e => {
+          this.loading = false
+          console.error(e)
+        })
     },
     getImageBase64 (path) {
       return new Promise((resolve, reject) => {
