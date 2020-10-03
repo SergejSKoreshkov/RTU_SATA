@@ -54,12 +54,16 @@ const { dialog } = require('electron').remote
 const mathjs = require('mathjs')
 
 let CONTEXT_WEAKMAP = null
+
+// MAIN_IMAGE_BUFFER and MAIN_IMAGE_BUFFER_LAB used to store pixels values for showInfo method (mouse move over canvas)
 let MAIN_IMAGE_BUFFER = null
 let MAIN_IMAGE_BUFFER_LAB = null
-let LAST_COMPONENT1_BUFFER = null
-let LAST_COMPONENT2_BUFFER = null
-let LAST_COMPONENT3_BUFFER = null
-let LAST_COMPONENT4_BUFFER = null
+
+// LAST_COMPONENT*_BUFFER is last saved buffer. Used to redraw canvas image after drawing new lines (mouse move over canvas)
+let LAST_COMPONENT1_BUFFER = null // Canvas buffer for R or L
+let LAST_COMPONENT2_BUFFER = null // Canvas buffer for G or A
+let LAST_COMPONENT3_BUFFER = null // Canvas buffer for B or B :)
+let LAST_COMPONENT4_BUFFER = null // Canvas buffer for I
 
 const M_MATRIX = mathjs.matrix([[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]])
 const E = 0.008856
@@ -107,6 +111,11 @@ export default {
     CONTEXT_WEAKMAP.set(this.$refs.canvasComponent4, this.$refs.canvasComponent4.getContext('2d'))
   },
   methods: {
+    // get mouse XY
+    // Draw last saved frame for each canvas
+    // Draw lines on each canvas
+    // Get color components values for XY (from saved buffer)
+    // Update UI color component labels
     showInfo (event) {
       if (!MAIN_IMAGE_BUFFER) return
       const { width, height } = event.target
@@ -150,6 +159,8 @@ export default {
         this.component3 = b
       }
     },
+    // Set UI color labels to 0
+    // Draw last saved frame for each canvas
     clearInfo () {
       this.component1 = '0'
       this.component2 = '0'
@@ -166,6 +177,7 @@ export default {
       if (LAST_COMPONENT3_BUFFER) ctxComponent3.putImageData(LAST_COMPONENT3_BUFFER, 0, 0)
       if (LAST_COMPONENT4_BUFFER) ctxComponent4.putImageData(LAST_COMPONENT4_BUFFER, 0, 0)
     },
+    // Draw lines on given context
     drawLine (context, x, y, width, height) {
       context.beginPath()
       context.strokeStyle = '#FF00FF'
@@ -176,76 +188,75 @@ export default {
       context.lineTo(x, height)
       context.stroke()
     },
-
     convertToLAB () {
-      this.loading = true
-      LAST_COMPONENT1_BUFFER = null
+      this.loading = true // Show loading spinner
+      LAST_COMPONENT1_BUFFER = null // Cleare last frame buffers
       LAST_COMPONENT2_BUFFER = null
       LAST_COMPONENT3_BUFFER = null
       LAST_COMPONENT4_BUFFER = null
-      setTimeout(() => {
+      setTimeout(() => { // Just to put hard math into async queue
         this.selectedColorSystem = 'LAB'
         const { width, height } = this.$refs.canvasMain
 
-        const ctxMain = CONTEXT_WEAKMAP.get(this.$refs.canvasMain)
+        const ctxMain = CONTEXT_WEAKMAP.get(this.$refs.canvasMain) // Get all canvas contexts
         const ctxL = CONTEXT_WEAKMAP.get(this.$refs.canvasComponent1)
         const ctxA = CONTEXT_WEAKMAP.get(this.$refs.canvasComponent2)
         const ctxB = CONTEXT_WEAKMAP.get(this.$refs.canvasComponent3)
 
         if (!ctxMain || !ctxL || !ctxA || !ctxB) return
 
-        const bufferMain = ctxMain.getImageData(0, 0, width, height)
-        const bufferL = ctxMain.getImageData(0, 0, width, height)
+        const bufferMain = ctxMain.getImageData(0, 0, width, height) // Get main image buffer (RGBA)
+        const bufferL = ctxMain.getImageData(0, 0, width, height) // Prepare buffers for each components (currently copy of main RGBA)
         const bufferA = ctxMain.getImageData(0, 0, width, height)
         const bufferB = ctxMain.getImageData(0, 0, width, height)
 
-        const labBuffer = {
+        const labBuffer = { // Temp object to push each color component in Array
           l: [],
           a: [],
           b: []
         }
 
         for (let i = 0; i < bufferMain.data.length; i += 4) {
-          const x = Math.pow(bufferMain.data[i] / 255.0, 2.2)
+          const x = Math.pow(bufferMain.data[i] / 255.0, 2.2) // Calculate x, y, z
           const y = Math.pow(bufferMain.data[i + 1] / 255.0, 2.2)
           const z = Math.pow(bufferMain.data[i + 2] / 255.0, 2.2)
 
-          const result = mathjs.multiply(M_MATRIX, mathjs.matrix([[x], [y], [z]]))._data
+          const result = mathjs.multiply(M_MATRIX, mathjs.matrix([[x], [y], [z]]))._data // [M] * [x; y; z]
 
-          const L = 116 * Fx(result[0][0]) - 16
+          const L = 116 * Fx(result[0][0]) - 16 // Calculate L, A, B
           const A = 500 * (Fx(result[0][0]) - Fy(result[1][0]))
           const B = 200 * (Fy(result[1][0]) - Fz(result[2][0]))
 
-          labBuffer.l.push(L)
+          labBuffer.l.push(L) // Push LAB components to Array
           labBuffer.a.push(A)
           labBuffer.b.push(B)
 
-          const l = L * 255 / 100
+          const l = L * 255 / 100 // Fill buffer for first canvas (L)
           bufferL.data[i] = l
           bufferL.data[i + 1] = l
           bufferL.data[i + 2] = l
           bufferL.data[i + 3] = 255
 
-          const aKoef = (A * 128 / 100)
+          const aKoef = (A * 128 / 100) // Fill buffer for second canvas (A)
           bufferA.data[i] = 128 + aKoef
           bufferA.data[i + 1] = 128 - aKoef
           bufferA.data[i + 2] = 128 + aKoef
           bufferA.data[i + 3] = 255
 
-          const bKoef = (B * 128 / 100)
+          const bKoef = (B * 128 / 100) // Fill buffer for third canvas (B)
           bufferB.data[i] = 128 + bKoef
           bufferB.data[i + 1] = 128 + bKoef
           bufferB.data[i + 2] = 128 - bKoef
           bufferB.data[i + 3] = 255
         }
 
-        MAIN_IMAGE_BUFFER_LAB = {
+        MAIN_IMAGE_BUFFER_LAB = { // Global save LAB pixels Array as Uint8ClampedArray
           l: Uint8ClampedArray.from(labBuffer.l),
           a: Uint8ClampedArray.from(labBuffer.a),
           b: Uint8ClampedArray.from(labBuffer.b)
         }
 
-        this.$refs.canvasComponent1.width = width
+        this.$refs.canvasComponent1.width = width // Set each component (L, A, B) canvas sizes
         this.$refs.canvasComponent2.width = width
         this.$refs.canvasComponent3.width = width
 
@@ -253,19 +264,19 @@ export default {
         this.$refs.canvasComponent2.height = height
         this.$refs.canvasComponent3.height = height
 
-        ctxL.putImageData(bufferL, 0, 0)
+        ctxL.putImageData(bufferL, 0, 0) // Put components buffer to canvas
         ctxA.putImageData(bufferA, 0, 0)
         ctxB.putImageData(bufferB, 0, 0)
         this.loading = false
 
-        LAST_COMPONENT1_BUFFER = bufferL
+        LAST_COMPONENT1_BUFFER = bufferL // Save buffer as last components frame (for cleanInfo and showInfo)
         LAST_COMPONENT2_BUFFER = bufferA
         LAST_COMPONENT3_BUFFER = bufferB
       }, 0)
     },
     convertToRGB () {
       this.loading = true
-      LAST_COMPONENT1_BUFFER = null
+      LAST_COMPONENT1_BUFFER = null // Clear last
       LAST_COMPONENT2_BUFFER = null
       LAST_COMPONENT3_BUFFER = null
       LAST_COMPONENT4_BUFFER = null
@@ -279,13 +290,13 @@ export default {
       const { width, height } = this.$refs.canvasMain
       if (!ctxMain || !ctxR || !ctxG || !ctxB || !ctxI) return
 
-      const bufferMain = ctxMain.getImageData(0, 0, width, height)
+      const bufferMain = ctxMain.getImageData(0, 0, width, height) // Prepare buffers
       const bufferR = ctxMain.getImageData(0, 0, width, height)
       const bufferG = ctxMain.getImageData(0, 0, width, height)
       const bufferB = ctxMain.getImageData(0, 0, width, height)
       const bufferI = ctxMain.getImageData(0, 0, width, height)
 
-      this.convertToGrayscale(
+      this.convertToGrayscale( // Convert main RGBA buffer to grayscale and draw on 4-th component's canvas
         this.$refs.canvasComponent4,
         ctxI,
         bufferI,
@@ -293,7 +304,7 @@ export default {
         height
       )
 
-      for (let i = 0; i < bufferMain.data.length; i += 4) {
+      for (let i = 0; i < bufferMain.data.length; i += 4) { // Just split RGBA to R, G, B
         bufferR.data[i] = bufferMain.data[i]
         bufferR.data[i + 1] = 0
         bufferR.data[i + 2] = 0
@@ -309,7 +320,7 @@ export default {
         bufferB.data[i + 2] = bufferMain.data[i + 2]
         bufferB.data[i + 3] = 255
       }
-      this.$refs.canvasComponent1.width = width
+      this.$refs.canvasComponent1.width = width // Adjust components canvas sizes
       this.$refs.canvasComponent2.width = width
       this.$refs.canvasComponent3.width = width
 
@@ -317,12 +328,12 @@ export default {
       this.$refs.canvasComponent2.height = height
       this.$refs.canvasComponent3.height = height
 
-      ctxR.putImageData(bufferR, 0, 0)
+      ctxR.putImageData(bufferR, 0, 0) // Draw R, G, B
       ctxG.putImageData(bufferG, 0, 0)
       ctxB.putImageData(bufferB, 0, 0)
       this.loading = false
 
-      LAST_COMPONENT1_BUFFER = bufferR
+      LAST_COMPONENT1_BUFFER = bufferR // Save buffers as last frames (for clearInfo and showInfo)
       LAST_COMPONENT2_BUFFER = bufferG
       LAST_COMPONENT3_BUFFER = bufferB
     },
@@ -353,6 +364,8 @@ export default {
       return true
     },
     copyMainImageBuffer (canvas, context) {
+      // Same as with LAB buffer. Create Arrays, push values from real image buffer,
+      // update global buffer with new Uint8ClampedArray (from Array type) props.
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
       const r = []
       const g = []
@@ -373,12 +386,17 @@ export default {
         i: Uint8ClampedArray.from(intensity)
       }
       this.loading = false
+      this.selectedColorSystem = ''
     },
     openImage (event) {
       const path = this.getFilePath()
       this.loading = true
       const canvas = event.target
       if (!canvas) {
+        this.loading = false
+        return
+      }
+      if (!path) {
         this.loading = false
         return
       }
