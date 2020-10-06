@@ -351,18 +351,6 @@ export default {
 
       LAST_COMPONENT4_BUFFER = imageData
     },
-    isImageSizeEqual () {
-      const { width: w1, height: h1 } = this.$refs.canvas1
-      const { width: w2, height: h2 } = this.$refs.canvas2
-      if (
-        w1 !== w2 ||
-        h1 !== h2
-      ) {
-        alert('Error: Image dimesions must be the same!')
-        return false
-      }
-      return true
-    },
     copyMainImageBuffer (canvas, context) {
       // Same as with LAB buffer. Create Arrays, push values from real image buffer,
       // update global buffer with new Uint8ClampedArray (from Array type) props.
