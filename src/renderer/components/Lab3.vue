@@ -44,9 +44,20 @@
 <script>
 const Jimp = require('jimp')
 const { dialog } = require('electron').remote
-const { debounce } = require('lodash-es')
+const { debounce } = require('lodash')
 
 let CONTEXT_WEAKMAP = null
+
+const Tm = 128
+const c = 0.007
+const Ts = 0.02
+const Tr = 0.7
+const T = -0.3
+
+const getSlSh = (t) => {
+  if (t <= 0) return [c, c - Ts * t]
+  return [c + Ts * t, c]
+}
 
 export default {
   name: 'lab3',
@@ -115,7 +126,7 @@ export default {
       const iCummulativeScaled = iCummulative.map(el => Math.floor(el * this.scale))
 
       const { width, height } = canvasMain
-      const buffer = ctxMain.getImageData(0, 0, width, height)
+      let buffer = ctxMain.getImageData(0, 0, width, height)
       for (let i = 0; i < buffer.data.length; i += 4) {
         const intensity = parseInt(0.299 * buffer.data[i] + 0.587 * buffer.data[i + 1] + 0.114 * buffer.data[i + 2])
         const scale = iCummulativeScaled[intensity] / intensity
@@ -143,6 +154,21 @@ export default {
         name: 'Intensity',
         data: baseImageHistoSeries.I
       }]
+
+      //Advanced algorithm 
+      buffer = ctxMain.getImageData(0, 0, width, height)
+      let mx = 0;
+      let count = 0;
+      for (let i = 0; i < buffer.data.length; i += 4) {
+        const intensity = parseInt(0.299 * buffer.data[i] + 0.587 * buffer.data[i + 1] + 0.114 * buffer.data[i + 2])
+        if (intensity !== 255 && intensity !== 0) {
+          mx += intensity
+          count++
+        }
+      }
+      mx /= count
+      const t = (mx - Tm) / Tm
+      const [Sl, Sh] = getSlSh(t)
     },
     getHistoSeries (canvas, context) {
       const colors = {
