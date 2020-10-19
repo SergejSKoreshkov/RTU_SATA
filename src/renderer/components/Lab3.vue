@@ -15,7 +15,7 @@
               <input type="range" min="0" max="255" step="1" v-model="scale" style="width: 100%;"> 
             </div>
             <div class="col-4">
-              <h4>Another algorithm</h4>
+              <h4>Modified Sigmoid</h4>
               <div class="flex-align">
                 Th: <input type="number" @change="debounceScale" min="0" max="1" v-model="advancedTh" style="width: 40%;"> 
                 C: <input type="number" @change="debounceScale" min="0" max="100" v-model="advancedC" style="width: 40%;">
