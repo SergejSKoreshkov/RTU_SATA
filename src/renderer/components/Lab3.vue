@@ -7,8 +7,23 @@
         </div>
         <div class="row">
             <div class="col-4">
-                <h4>Click to add image</h4>
-                <hr>
+              <h4>Click to add image</h4>
+              <hr>
+            </div>
+            <div class="col-4">
+              <h4>Histogram Equalization</h4>
+              <input type="range" min="0" max="255" step="1" v-model="scale" style="width: 100%;"> 
+            </div>
+            <div class="col-4">
+              <h4>Another algorithm</h4>
+              <div class="flex-align">
+                Th: <input type="number" @change="debounceScale" min="0" max="1" v-model="advancedTh" style="width: 40%;"> 
+                C: <input type="number" @change="debounceScale" min="0" max="100" v-model="advancedC" style="width: 40%;">
+              </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-4">
                 <canvas class="hover"
                     @click="openImage"
                     ref="canvasMain"
@@ -18,8 +33,6 @@
                 <apexchart type="area" :options="options" :series="series"></apexchart>
             </div>
             <div class="col-4">
-                <h4>Histogram Equalization</h4>
-                <input type="range" min="0" max="255" step="1" v-model="scale" style="width: 100%;"> 
                 <canvas
                     ref="canvasAlgorithmBase"
                     width="200"
@@ -28,8 +41,6 @@
                 <apexchart type="area" :options="options" :series="seriesBase"></apexchart>
             </div>
             <div class="col-4">
-                <h4>Another algorithm</h4>
-                <hr>
                 <canvas
                     ref="canvasAlgorithmAnother"
                     width="200"
@@ -48,16 +59,7 @@ const { debounce } = require('lodash')
 
 let CONTEXT_WEAKMAP = null
 
-const Tm = 128
-const c = 0.007
-const Ts = 0.02
-const Tr = 0.7
-const T = -0.3
-
-const getSlSh = (t) => {
-  if (t <= 0) return [c, c - Ts * t]
-  return [c + Ts * t, c]
-}
+const modifiedSigmoid = (pixel, C, Th) => (1 / (1 + Math.pow(Math.E, C * (Th - pixel / 255.0)))) * 255.0
 
 export default {
   name: 'lab3',
@@ -65,6 +67,8 @@ export default {
     return {
       loading: false,
       scale: 200,
+      advancedC: 10,
+      advancedTh: 0.3,
       options: {
         colors: ['#f00', '#0f0', '#00f', '#777'],
         chart: {
@@ -155,20 +159,35 @@ export default {
         data: baseImageHistoSeries.I
       }]
 
-      //Advanced algorithm 
+      // Advanced algorithm
       buffer = ctxMain.getImageData(0, 0, width, height)
-      let mx = 0;
-      let count = 0;
+      const C = this.advancedC
+      const Th = this.advancedTh
       for (let i = 0; i < buffer.data.length; i += 4) {
-        const intensity = parseInt(0.299 * buffer.data[i] + 0.587 * buffer.data[i + 1] + 0.114 * buffer.data[i + 2])
-        if (intensity !== 255 && intensity !== 0) {
-          mx += intensity
-          count++
-        }
+        buffer.data[i] = modifiedSigmoid(buffer.data[i], C, Th)
+        buffer.data[i + 1] = modifiedSigmoid(buffer.data[i + 1], C, Th)
+        buffer.data[i + 2] = modifiedSigmoid(buffer.data[i + 2], C, Th)
       }
-      mx /= count
-      const t = (mx - Tm) / Tm
-      const [Sl, Sh] = getSlSh(t)
+      const canvasAdvanced = this.$refs.canvasAlgorithmAnother
+      const ctxAdvanced = CONTEXT_WEAKMAP.get(canvasAdvanced)
+      canvasAdvanced.width = canvasMain.width
+      canvasAdvanced.height = canvasMain.height
+      ctxAdvanced.putImageData(buffer, 0, 0)
+
+      const advancedImageHistoSeries = this.getHistoSeries(canvasAdvanced, ctxAdvanced)
+      this.seriesAnother = [{
+        name: 'Red',
+        data: advancedImageHistoSeries.R
+      }, {
+        name: 'Green',
+        data: advancedImageHistoSeries.G
+      }, {
+        name: 'Blue',
+        data: advancedImageHistoSeries.B
+      }, {
+        name: 'Intensity',
+        data: advancedImageHistoSeries.I
+      }]
     },
     getHistoSeries (canvas, context) {
       const colors = {
@@ -274,5 +293,10 @@ export default {
       z-index: 999;
       background-color: #000000;
       opacity: 0.9;
+  }
+  .flex-align {
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 1em;
   }
 </style>
