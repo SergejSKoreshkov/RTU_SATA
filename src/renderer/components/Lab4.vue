@@ -43,6 +43,7 @@
         </div>
         <div class="flex-align">
           Invert = {{invert}} <input type="checkbox" v-model="invert" @change="bradley" style="margin-right: auto; margin-left: 1em"> 
+          Map to closest color (R,G,B,C,M,Y) = {{colorSegments}} <input type="checkbox" v-model="colorSegments" @change="bradley" style="margin-right: auto; margin-left: 1em"> 
         </div>
       </div>
     </div>
@@ -67,6 +68,15 @@ const prewittY = [
   [-1, -1, -1]
 ]
 
+const colors = [
+  { r: 0, g: 0, b: 255 },
+  { r: 0, g: 255, b: 0 },
+  { r: 255, g: 0, b: 0 },
+  { r: 255, g: 255, b: 0 },
+  { r: 0, g: 255, b: 255 },
+  { r: 255, g: 0, b: 255 }
+]
+
 export default {
   name: 'lab4',
   computed: {
@@ -80,7 +90,8 @@ export default {
       t: 0.15,
       sPow: 1,
       width: 0,
-      invert: false
+      invert: false,
+      colorSegments: true
     }
   },
   mounted () {
@@ -139,10 +150,16 @@ export default {
       // Bradley
       const buffer = ctxMain.getImageData(0, 0, width, height)
       const intensityArray = new Array(width * height).fill(0)
+      const rArray = new Array(width * height).fill(0)
+      const gArray = new Array(width * height).fill(0)
+      const bArray = new Array(width * height).fill(0)
       let index = 0
       for (let i = 0; i < buffer.data.length; i += 4) {
         const intensity = parseInt(0.299 * buffer.data[i] + 0.587 * buffer.data[i + 1] + 0.114 * buffer.data[i + 2])
         intensityArray[index] = intensity
+        rArray[index] = buffer.data[i]
+        gArray[index] = buffer.data[i + 1]
+        bArray[index] = buffer.data[i + 2]
         index++
       }
 
@@ -196,11 +213,32 @@ export default {
       }
 
       res.forEach((el, index) => {
-        if (this.invert) el = 255 - el
-        buffer.data[index * 4] = el
-        buffer.data[index * 4 + 1] = el
-        buffer.data[index * 4 + 2] = el
-        buffer.data[index * 4 + 3] = 255
+        if (this.colorSegments) {
+          if (el !== 0) {
+            buffer.data[index * 4] = el
+            buffer.data[index * 4 + 1] = el
+            buffer.data[index * 4 + 2] = el
+            buffer.data[index * 4 + 3] = 255
+            return
+          }
+          const resultArray = colors
+            .map(pixel =>
+              Math.sqrt(Math.pow(rArray[index] - pixel.r, 2) + Math.pow(gArray[index] - pixel.g, 2) + Math.pow(bArray[index] - pixel.b, 2))
+            )
+
+          const bestColorIndex = resultArray.indexOf(Math.min(...resultArray))
+          const color = colors[bestColorIndex]
+          buffer.data[index * 4] = color.r
+          buffer.data[index * 4 + 1] = color.g
+          buffer.data[index * 4 + 2] = color.b
+          buffer.data[index * 4 + 3] = 255
+        } else {
+          if (this.invert) el = 255 - el
+          buffer.data[index * 4] = el
+          buffer.data[index * 4 + 1] = el
+          buffer.data[index * 4 + 2] = el
+          buffer.data[index * 4 + 3] = 255
+        }
       })
 
       ctxBradley.putImageData(buffer, 0, 0)
