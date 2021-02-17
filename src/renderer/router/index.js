@@ -11,6 +11,11 @@ export default new Router({
       component: require('@/components/Lab1').default
     },
     {
+      path: '/lab1video',
+      name: 'lab1video',
+      component: require('@/components/Lab1-video').default
+    },
+    {
       path: '*',
       redirect: '/'
     }

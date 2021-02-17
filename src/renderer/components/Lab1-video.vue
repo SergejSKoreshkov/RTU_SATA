@@ -9,29 +9,31 @@
 
     <!-- Headings -->
     <div class="row">
-      <div class="col-4">
-        <h4>Original image</h4>
+      <div class="col-6">
+        <h4>Frame</h4>
       </div>
-      <div class="col-4">
+      <div class="col-6">
         <h4>Select region</h4>
       </div>
     </div>
 
     <!-- Canvas -->
     <div class="row">
+      <div class="col-6">
+        <video ref="video"></video>
+        <button @click="play">play</button>
+        <button @click="pause">pause</button>
+      </div>
 
-      <div class="col-4">
+      <div class="col-6">
         <canvas
           ref="canvasMain"
           width="200"
           height="100"
         ></canvas>
-        <button
-          @click="openImage"
-        >Load image</button>
       </div>
 
-      <div class="col-4">
+      <div class="col-6">
         <canvas
           style="cursor: pointer"
           ref="canvasRegion"
@@ -41,7 +43,7 @@
         ></canvas>
       </div>
 
-      <div class="col-4">
+      <div class="col-6">
         <canvas
           style="cursor: pointer"
           ref="canvasSelectedObject"
@@ -55,16 +57,15 @@
 </template>
 
 <script>
-const Jimp = require('jimp')
-const { dialog } = require('electron').remote
-
 let CONTEXT_WEAKMAP = null
 
 export default {
   name: 'lab1',
   data () {
     return {
-      loading: false
+      loading: false,
+      isPlaying: false,
+      lastEvent: null
     }
   },
   mounted () {
@@ -75,6 +76,7 @@ export default {
   },
   methods: {
     canvasClick (event) {
+      this.lastEvent = event
       // get canvas context and image-data
       const canvas = event.target
       const { width, height } = canvas
@@ -152,54 +154,44 @@ export default {
       canvasDest.height = height
       contextDest.putImageData(imageData, 0, 0)
     },
-    // FILE LOADING SECTION, NOT INTERESTING
-    openImage () {
-      const path = this.getFilePath()
-      this.loading = true
-      const canvas = this.$refs.canvasMain
-      if (!canvas) {
-        this.loading = false
-        return
+    play () {
+      const video = this.$refs.video
+      if (this.interval) return
+      this.isPlaying = true
+      const raf = () => {
+        requestAnimationFrame(() => {
+          this.setNewFrame()
+          if (!this.isPlaying) return
+          raf()
+        })
       }
-      if (!path) {
-        this.loading = false
-        return
-      }
-      this.loadFromPathToCanvas(canvas, path[0])
-    },
-    loadFromPathToCanvas (canvas, path) {
-      const ctx = CONTEXT_WEAKMAP.get(canvas)
-      if (!ctx) return
-      this.getImageBase64(path)
-        .then(imageBase64 => {
-          const image = new Image()
-          image.src = imageBase64
-          image.onload = () => {
-            canvas.width = image.width
-            canvas.height = image.height
-            ctx.drawImage(image, 0, 0)
-            this.convertToGrayscale(canvas, this.$refs.canvasRegion)
-            this.loading = false
+      raf()
+
+      window.navigator.mediaDevices.getUserMedia({ audio: false, video: true })
+        .then(mediaStream => {
+          video.srcObject = mediaStream
+          video.onloadedmetadata = () => {
+            video.play()
+            this.$refs.canvasMain.width = video.videoWidth
+            this.$refs.canvasMain.height = video.videoHeight
+            this.$refs.canvasRegion.width = video.videoWidth
+            this.$refs.canvasRegion.height = video.videoHeight
+            this.$refs.canvasSelectedObject.width = video.videoWidth
+            this.$refs.canvasSelectedObject.height = video.videoHeight
           }
         })
-        .catch(e => {
-          this.loading = false
-          console.error(e)
-        })
     },
-    getImageBase64 (path) {
-      return new Promise((resolve, reject) => {
-        Jimp.read(path, (err, image) => {
-          if (err) reject(err)
-          image.getBase64(Jimp.MIME_JPEG, (err, data) => {
-            if (err) reject(err)
-            resolve(data)
-          })
-        })
-      })
+    pause () {
+      const video = this.$refs.video
+      video.pause()
+      if (!this.interval) return
+      this.isPlaying = false
     },
-    getFilePath () {
-      return dialog.showOpenDialog({ properties: ['openFile'] })
+    setNewFrame () {
+      const video = this.$refs.video
+      CONTEXT_WEAKMAP.get(this.$refs.canvasMain).drawImage(video, 0, 0)
+      this.convertToGrayscale(this.$refs.canvasMain, this.$refs.canvasRegion)
+      if (this.lastEvent) this.canvasClick(this.lastEvent)
     }
   }
 }
@@ -230,5 +222,8 @@ export default {
     justify-content: space-between;
     padding-bottom: 1em;
     align-items: center;
+  }
+  video {
+    width: 100%;
   }
 </style>
