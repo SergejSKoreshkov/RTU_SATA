@@ -1,5 +1,5 @@
 {
-  "name": "rtu_image-processing",
+  "name": "rtu_sata",
   "version": "0.0.1",
   "author": "Sergejs Koreskovs <SergejSKoreshkov@gmail.com>",
   "description": "RTU Image Processing works",
@@ -19,8 +19,8 @@
     "postinstall": "npm run lint:fix"
   },
   "build": {
-    "productName": "rtu_image-processing",
-    "appId": "com.korssdev.rtuimageprocessing",
+    "productName": "rtu_sata",
+    "appId": "com.korssdev.rtusata",
     "directories": {
       "output": "build"
     },

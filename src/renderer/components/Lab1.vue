@@ -1,41 +1,43 @@
 <template>
-  <div class="lab1">
-    <div class="row">
-      <div class="col-8">
-    <h3>Click on canvas to add image</h3>
-      </div>
-      <div class="col-4">
-        <h4>Actions</h4>
+  <div class="lab4">
+    <div class="overlay-dark" v-show="loading">
+      <div class="spinner-border" role="status">
+        <span class="sr-only">Loading...</span>
       </div>
     </div>
     <div class="row">
       <div class="col-4">
-        <canvas class="hover" @click="openImage" ref="canvas1" width="200" height="100"></canvas>
+        <h4>Original image</h4>
       </div>
       <div class="col-4">
-        <canvas class="hover" @click="openImage" ref="canvas2" width="200" height="100"></canvas>
-      </div>
-      <div class="col-4">
-        <button class="btn btn-primary" @click="performAvgSquareError">Avg square error</button>
-        <span>Result: {{ resultAvgSquareError }}</span><hr>
-        <button class="btn btn-primary" @click="performMaxError">Max error</button>
-        <span>Result: {{ resultMaxError }}</span>
+        <h4>Select region</h4>
       </div>
     </div>
     <div class="row">
       <div class="col-4">
-        <h4>Heat map</h4>
+        <canvas
+          ref="canvasMain"
+          width="200"
+          height="100"
+        ></canvas>
+        <button @click="openImage">Load image</button>
       </div>
       <div class="col-4">
-        <h4>Heat map opacity overlay</h4>
+        <canvas
+          style="cursor: pointer"
+          ref="canvasRegion"
+          width="200"
+          height="100"
+          @mousemove="canvasClick"
+        ></canvas>
       </div>
-    </div>
-    <div class="row">
       <div class="col-4">
-        <canvas ref="canvasHeat" width="200" height="100"></canvas>
-      </div>
-      <div class="col-4">
-        <canvas ref="canvasHeatOverlay" width="200" height="100"></canvas>
+        <canvas
+          style="cursor: pointer"
+          ref="canvasSelectedObject"
+          width="200"
+          height="100"
+        ></canvas>
       </div>
     </div>
   </div>
@@ -44,111 +46,91 @@
 <script>
 const Jimp = require('jimp')
 const { dialog } = require('electron').remote
+// const { some } = require('lodash')
 
 let CONTEXT_WEAKMAP = null
-
-const HEATMAP_OVERLAY_ALPHA = 0.6
 
 export default {
   name: 'lab1',
   data () {
     return {
-      resultAvgSquareError: 'no data',
-      resultMaxError: 'no data'
+      loading: false
     }
   },
   mounted () {
     CONTEXT_WEAKMAP = new WeakMap()
-    CONTEXT_WEAKMAP.set(this.$refs.canvas1, this.$refs.canvas1.getContext('2d'))
-    CONTEXT_WEAKMAP.set(this.$refs.canvas2, this.$refs.canvas2.getContext('2d'))
-    CONTEXT_WEAKMAP.set(this.$refs.canvasHeat, this.$refs.canvasHeat.getContext('2d'))
-    CONTEXT_WEAKMAP.set(this.$refs.canvasHeatOverlay, this.$refs.canvasHeatOverlay.getContext('2d'))
+    CONTEXT_WEAKMAP.set(this.$refs.canvasMain, this.$refs.canvasMain.getContext('2d'))
+    CONTEXT_WEAKMAP.set(this.$refs.canvasRegion, this.$refs.canvasRegion.getContext('2d'))
+    CONTEXT_WEAKMAP.set(this.$refs.canvasSelectedObject, this.$refs.canvasSelectedObject.getContext('2d'))
   },
   methods: {
-    performAvgSquareError () {
-      if (!this.isImageSizeEqual()) return
-      if (!CONTEXT_WEAKMAP) return
-      const ctx1 = CONTEXT_WEAKMAP.get(this.$refs.canvas1)
-      const ctx2 = CONTEXT_WEAKMAP.get(this.$refs.canvas2)
-      const ctxHeat = CONTEXT_WEAKMAP.get(this.$refs.canvasHeat)
-      const ctxHeatOverlay = CONTEXT_WEAKMAP.get(this.$refs.canvasHeatOverlay)
-      if (!ctx1 || !ctx2 || !ctxHeat || !ctxHeatOverlay) return
+    canvasClick (event) {
+      const canvas = event.target
+      const { width, height } = canvas
+      const ctx = CONTEXT_WEAKMAP.get(canvas)
+      const imageData = ctx.getImageData(0, 0, width, height)
 
-      const { width, height } = this.$refs.canvas1
-      const imageData1 = ctx1.getImageData(0, 0, width, height).data
-      const imageData2 = ctx2.getImageData(0, 0, width, height).data
-      const imageDataHeat = ctx1.getImageData(0, 0, width, height)
-      const imageDataHeatOverlay = ctx1.getImageData(0, 0, width, height)
+      const size = event.target.getBoundingClientRect()
+      const x = Math.trunc((event.clientX - size.left) / size.width * width)
+      const y = Math.trunc((event.clientY - size.top) / size.height * height)
 
-      let totalDiff = 0
-      for (let i = 0; i < imageData1.length; i += 4) {
-        const pixelSquareDiff = Math.pow(imageData1[i] - imageData2[i], 2)
-        totalDiff += pixelSquareDiff
+      const [regionImageData] = this.regionGrow(canvas, ctx, imageData, { x, y })
 
-        const mappedColor = parseInt(pixelSquareDiff / 65025.0 * 255.0)
-        imageDataHeat.data[i] = mappedColor
-        imageDataHeat.data[i + 1] = 255 - mappedColor
-        imageDataHeat.data[i + 2] = 0
-        imageDataHeat.data[i + 3] = 255
+      const canvasSelectedObject = this.$refs.canvasSelectedObject
+      const ctxSelectedObject = CONTEXT_WEAKMAP.get(canvasSelectedObject)
+      canvasSelectedObject.width = width
+      canvasSelectedObject.height = height
 
-        imageDataHeatOverlay[i] = imageData1[i]
-        if (mappedColor !== 0) {
-          imageDataHeatOverlay.data[i] = imageDataHeatOverlay.data[i] * HEATMAP_OVERLAY_ALPHA + mappedColor * (1.0 - HEATMAP_OVERLAY_ALPHA)
-          imageDataHeatOverlay.data[i + 1] = imageDataHeatOverlay.data[i] * HEATMAP_OVERLAY_ALPHA + (255 - mappedColor) * (1.0 - HEATMAP_OVERLAY_ALPHA)
+      ctxSelectedObject.putImageData(regionImageData, 0, 0)
+    },
+    regionGrow (canvas, ctx, imageData, point) {
+      const { width, height } = canvas
+      let pixelCoordinates = Math.trunc(width * point.y + point.x) * 4
+      const startIntensity = imageData.data[pixelCoordinates]
+      const used = new Uint8ClampedArray(width * height * 4)
+      const stack = [[point.x, point.y]]
+      const T = 5
+
+      const resultImageData = new ImageData(width, height)
+
+      while (stack.length !== 0) {
+        const [ x, y ] = stack.shift()
+        pixelCoordinates = Math.trunc(width * y + x) * 4
+        const nowIntensity = imageData.data[pixelCoordinates]
+        if (
+          startIntensity - T < nowIntensity &&
+          startIntensity + T > nowIntensity &&
+          !used[pixelCoordinates]
+        ) {
+          used[pixelCoordinates] = true
+
+          resultImageData.data[pixelCoordinates] = 0
+          resultImageData.data[pixelCoordinates + 1] = 255
+          resultImageData.data[pixelCoordinates + 2] = 0
+          resultImageData.data[pixelCoordinates + 3] = 255
+
+          stack.push([x + 1, y])
+          stack.push([x - 1, y])
+          stack.push([x, y + 1])
+          stack.push([x, y - 1])
         }
       }
-      this.resultAvgSquareError = (totalDiff / imageData1.length).toFixed(2)
-
-      this.$refs.canvasHeat.width = imageDataHeat.width
-      this.$refs.canvasHeat.height = imageDataHeat.height
-      ctxHeat.putImageData(imageDataHeat, 0, 0)
-
-      this.$refs.canvasHeatOverlay.width = imageDataHeatOverlay.width
-      this.$refs.canvasHeatOverlay.height = imageDataHeatOverlay.height
-      ctxHeatOverlay.putImageData(imageDataHeatOverlay, 0, 0)
+      return [resultImageData, imageData]
     },
-    performMaxError () {
-      if (!this.isImageSizeEqual()) return
-      if (!CONTEXT_WEAKMAP) return
-      const ctx1 = CONTEXT_WEAKMAP.get(this.$refs.canvas1)
-      const ctx2 = CONTEXT_WEAKMAP.get(this.$refs.canvas2)
-      if (!ctx1 || !ctx2) return
-
-      const { width, height } = this.$refs.canvas1
-      const imageData1 = ctx1.getImageData(0, 0, width, height).data
-      const imageData2 = ctx2.getImageData(0, 0, width, height).data
-
-      let maxError = 0
-      for (let i = 0; i < imageData1.length; i += 4) {
-        const pixelDiff = Math.abs(imageData1[i] - imageData2[i])
-        maxError = maxError > pixelDiff ? maxError : pixelDiff
-      }
-      this.resultMaxError = maxError.toFixed(2)
-    },
-    isImageSizeEqual () {
-      const { width: w1, height: h1 } = this.$refs.canvas1
-      const { width: w2, height: h2 } = this.$refs.canvas2
-      if (
-        w1 !== w2 ||
-        h1 !== h2
-      ) {
-        alert('Error: Image dimesions must be the same!')
-        return false
-      }
-      return true
-    },
-    openImage (event) {
+    // FILE LOADING SECTION =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+    openImage () {
       const path = this.getFilePath()
-      if (path.length === 1) {
-        const canvas = event.target
-        if (!canvas) return
-        this.loadFromPathToCanvas(canvas, path[0])
-      } else if (path.length === 2) {
-        this.loadFromPathToCanvas(this.$refs.canvas1, path[0])
-        this.loadFromPathToCanvas(this.$refs.canvas2, path[1])
-      } else {
-        alert('Maximum files allowed: 2')
+      this.loading = true
+      const canvas = this.$refs.canvasMain
+      if (!canvas) {
+        this.loading = false
+        return
       }
+      if (!path) {
+        this.loading = false
+        return
+      }
+      this.loadFromPathToCanvas(canvas, path[0])
     },
     loadFromPathToCanvas (canvas, path) {
       const ctx = CONTEXT_WEAKMAP.get(canvas)
@@ -161,18 +143,14 @@ export default {
             canvas.width = image.width
             canvas.height = image.height
             ctx.drawImage(image, 0, 0)
-            const imageData = ctx.getImageData(0, 0, image.width, image.height)
-            for (let i = 0; i < imageData.data.length; i += 4) {
-              const intensity = parseInt(0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2])
-              imageData.data[i] = intensity
-              imageData.data[i + 1] = intensity
-              imageData.data[i + 2] = intensity
-              imageData.data[i + 3] = 255
-            }
-            ctx.putImageData(imageData, 0, 0)
+            this.convertToGrayscale(canvas, this.$refs.canvasRegion)
+            this.loading = false
           }
         })
-        .catch(e => console.error(e))
+        .catch(e => {
+          this.loading = false
+          console.error(e)
+        })
     },
     getImageBase64 (path) {
       return new Promise((resolve, reject) => {
@@ -186,7 +164,23 @@ export default {
       })
     },
     getFilePath () {
-      return dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })
+      return dialog.showOpenDialog({ properties: ['openFile'] })
+    },
+    convertToGrayscale (canvasSrc, canvasDest) {
+      const { width, height } = canvasSrc
+      const contextDest = CONTEXT_WEAKMAP.get(canvasDest)
+      const contextSrc = CONTEXT_WEAKMAP.get(canvasSrc)
+      const imageData = contextSrc.getImageData(0, 0, width, height)
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const intensity = parseInt(0.299 * imageData.data[i] + 0.587 * imageData.data[i + 1] + 0.114 * imageData.data[i + 2])
+        imageData.data[i] = intensity
+        imageData.data[i + 1] = intensity
+        imageData.data[i + 2] = intensity
+        imageData.data[i + 3] = 255
+      }
+      canvasDest.width = width
+      canvasDest.height = height
+      contextDest.putImageData(imageData, 0, 0)
     }
   }
 }
@@ -196,12 +190,26 @@ export default {
   canvas {
     border: 1px solid black;
     width: 100%;
-    transition: 0.3s ease;
     box-shadow: none;
     border-radius: 3px;
   }
-  .hover:hover {
-    box-shadow: 0px 0px 10px;
-    cursor: pointer;
+  .overlay-dark {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    background-color: #000000;
+    opacity: 0.9;
+  }
+  .flex-align {
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 1em;
+    align-items: center;
   }
 </style>
