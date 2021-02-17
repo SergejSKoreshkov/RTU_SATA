@@ -1,22 +1,31 @@
-# RTU Image Processing
+# RTU SATA
 
 #### How to setup
 
-* Install Node.js
-* Install Yarn
+* Install Node.js - https://nodejs.org/en/
+* Install Yarn - https://yarnpkg.com/
+* Install Git - https://git-scm.com/
   
 ``` bash
-# Step 1 - install dependencies
-yarn
+# Step 1 - clone repo
+git clone https://github.com/SergejSKoreshkov/RTU_SATA
 
-# Step 2 - run development server (hot reload on localhost:9080)
+# Step 2 - cd to directory
+cd RTU_SATA
+
+# Step 3 - install dependencies
+yarn
+```
+
+#### How to run
+
+``` bash
 yarn dev
 ```
 
 #### How to build
 
 ``` bash
-# build electron application for production
 yarn build
 ```
 

@@ -2,7 +2,7 @@
   "name": "rtu_sata",
   "version": "0.0.1",
   "author": "Sergejs Koreskovs <SergejSKoreshkov@gmail.com>",
-  "description": "RTU Image Processing works",
+  "description": "RTU SA un TA works",
   "license": null,
   "main": "./dist/electron/main.js",
   "scripts": {
