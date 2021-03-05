@@ -43,40 +43,54 @@
 
     <!-- Extracted region, Matched pattern, Region-Pattern match percent -->
     <div class='row' style='margin-top: 24px;'>
-      <div class='col-4'>
+      <div class='col-4 hide-from-user'>
         <h4>Extracted region</h4>
       </div>
       <div class='col-4'>
-        <h4>Matching pattern</h4>
+        <h4>Matching template</h4>
+      </div>
+      <div class='col-4 hide-from-user'>
+        <h4>Template</h4>
       </div>
     </div>
     <div class='row'>
-      <div class='col-4'>
-        <canvas id='extractedRegion' width='200' height='100'></canvas>
+      <div class='col-4 hide-from-user'>
+        <canvas ref='extractedRegion' width='200' height='100'></canvas>
       </div>
       <div class='col-4'>
-        <canvas id='matchedPattern' width='200' height='100'></canvas>
+        <canvas ref='matchedPattern' width='200' height='100'></canvas>
+      </div>
+      <div class='col-4 hide-from-user'>
+        <canvas ref='templateCanvas' width='200' height='100'></canvas>
       </div>
       <div class='col-4'>
-        <div id='match-percent'></div>
+        <div id='pat-1' ref='pat1'></div>
+        <div id='pat-2' ref='pat2'></div>
+        <div id='pat-3' ref='pat3'></div>
       </div>
     </div>
+    <button @click='loadDirectory'>Select template images</button>
+    <button @click='compareRegionTemplates'>Compare Images</button>
   </div>
 </template>
 
 <script>
 const Jimp = require('jimp')
+const fs = require('fs')
+const { join } = require('path')
 const { dialog } = require('electron').remote
 // const { some } = require('lodash')
 
 let CONTEXT_WEAKMAP = null
 let REGION_BOUNDARIES = null
+let EXTRACTED_REGION_DATA = null
 
 export default {
   name: 'lab1',
   data () {
     return {
-      loading: false
+      loading: false,
+      templateFiles: null
     }
   },
   mounted () {
@@ -84,6 +98,8 @@ export default {
     CONTEXT_WEAKMAP.set(this.$refs.canvasMain, this.$refs.canvasMain.getContext('2d'))
     CONTEXT_WEAKMAP.set(this.$refs.canvasRegion, this.$refs.canvasRegion.getContext('2d'))
     CONTEXT_WEAKMAP.set(this.$refs.canvasSelectedObject, this.$refs.canvasSelectedObject.getContext('2d'))
+    CONTEXT_WEAKMAP.set(this.$refs.templateCanvas, this.$refs.templateCanvas.getContext('2d'))
+    CONTEXT_WEAKMAP.set(this.$refs.matchedPattern, this.$refs.matchedPattern.getContext('2d'))
   },
   methods: {
     canvasClick (event) {
@@ -97,46 +113,23 @@ export default {
       const y = Math.trunc((event.clientY - size.top) / size.height * height)
 
       const [regionImageData] = this.regionGrow(canvas, ctx, imageData, { x, y })
+      const canvasSelectedObject = this.$refs.canvasSelectedObject
+      const ctxSelectedObject = CONTEXT_WEAKMAP.get(canvasSelectedObject)
+      canvasSelectedObject.width = width; canvasSelectedObject.height = height
+      ctxSelectedObject.putImageData(regionImageData, 0, 0)
 
       // Calculating last region's dimensions
       let regWidth = REGION_BOUNDARIES.x_max - REGION_BOUNDARIES.x_min + 1
       let regHeight = REGION_BOUNDARIES.y_max - REGION_BOUNDARIES.y_min + 1
 
       // Extracting pixels that belongs to the selected region
-      let regData = this.extractRegion(regionImageData, width, height, regWidth, regHeight)
-
-      // Setting up all alpha values to be equal to 255, so that the black color could be seen
-      this.setAlphaMax(regData)
+      EXTRACTED_REGION_DATA = this.extractRegion(regionImageData, width, height, regWidth, regHeight)
 
       // Drawing region on the canvas
-      let regCanvas = document.getElementById('extractedRegion')
-      regCanvas.height = height; regCanvas.width = width
+      let regCanvas = this.$refs.extractedRegion
       let regCanvasCtx = regCanvas.getContext('2d')
-      regCanvasCtx.putImageData(regData, 0, 0)
-
-      const tgtWidth = width
-      const tgtHeight = height
-
-      // Resizing extracted region
-      let regDataResized
-      if (regHeight === tgtHeight && regWidth === tgtWidth) {
-        regDataResized = regData
-      } else {
-        regDataResized = this.resizeImage(regData, regWidth, regHeight, tgtWidth, tgtHeight)
-      }
-
-      // Drawing resized region
-      regCanvas = document.getElementById('matchedPattern')
       regCanvas.height = height; regCanvas.width = width
-      regCanvasCtx = regCanvas.getContext('2d')
-      regCanvasCtx.putImageData(regDataResized, 0, 0)
-
-      const canvasSelectedObject = this.$refs.canvasSelectedObject
-      const ctxSelectedObject = CONTEXT_WEAKMAP.get(canvasSelectedObject)
-      canvasSelectedObject.width = width
-      canvasSelectedObject.height = height
-
-      ctxSelectedObject.putImageData(regionImageData, 0, 0)
+      regCanvasCtx.putImageData(EXTRACTED_REGION_DATA, 0, 0)
     },
     regionGrow (canvas, ctx, imageData, point) {
       const { width, height } = canvas
@@ -211,7 +204,7 @@ export default {
       return [resultImageData, imageData]
     },
     // FILE LOADING SECTION =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    openImage () {
+    async openImage () {
       const path = this.getFilePath()
       this.loading = true
       const canvas = this.$refs.canvasMain
@@ -223,27 +216,31 @@ export default {
         this.loading = false
         return
       }
-      this.loadFromPathToCanvas(canvas, path[0])
+      await this.loadFromPathToCanvas(canvas, path[0])
+      this.convertToGrayscale(canvas, this.$refs.canvasRegion)
+      this.loading = false
     },
     loadFromPathToCanvas (canvas, path) {
-      const ctx = CONTEXT_WEAKMAP.get(canvas)
-      if (!ctx) return
-      this.getImageBase64(path)
-        .then(imageBase64 => {
-          const image = new Image()
-          image.src = imageBase64
-          image.onload = () => {
-            canvas.width = image.width
-            canvas.height = image.height
-            ctx.drawImage(image, 0, 0)
-            this.convertToGrayscale(canvas, this.$refs.canvasRegion)
+      return new Promise((resolve, reject) => {
+        const ctx = CONTEXT_WEAKMAP.get(canvas)
+        if (!ctx) return
+        this.getImageBase64(path)
+          .then(imageBase64 => {
+            const image = new Image()
+            image.src = imageBase64
+            image.onload = () => {
+              canvas.width = image.width
+              canvas.height = image.height
+              ctx.drawImage(image, 0, 0)
+              resolve()
+            }
+          })
+          .catch(e => {
             this.loading = false
-          }
-        })
-        .catch(e => {
-          this.loading = false
-          console.error(e)
-        })
+            console.error(e)
+            reject(e)
+          })
+      })
     },
     getImageBase64 (path) {
       return new Promise((resolve, reject) => {
@@ -295,9 +292,6 @@ export default {
 
       return regionData
     },
-    setAlphaMax (regionData) {
-      for (let i = 0; i < regionData.data.length; i += 4) regionData.data[i + 3] = 255
-    },
     resizeImage (imageData, width, height, nWidth, nHeight) {
       let resizedImageData = new ImageData(nWidth, nHeight)
       let yRatio = height / nHeight
@@ -323,6 +317,310 @@ export default {
       }
 
       return resizedImageData
+    },
+    loadDirectory () {
+      const [folderPath] = dialog.showOpenDialog({ properties: ['openDirectory'] })
+      this.templateFiles = fs.readdirSync(folderPath)
+        .filter(el => el.includes('.png'))
+        .map(el => join(folderPath, el))
+    },
+    async compareRegionTemplates () {
+      // If either directory or region in the image wasn't selected
+      if (!this.templateFiles || !EXTRACTED_REGION_DATA) {
+        return
+      }
+
+      let cpResults = []
+      let tplCanvas = this.$refs.templateCanvas
+      let regCanvas = this.$refs.matchedPattern
+      let regRescld = null // Holds region data after rescale
+
+      for (let i = 0; i < this.templateFiles.length; i++) {
+        await this.loadFromPathToCanvas(tplCanvas, this.templateFiles[i]).then(
+          () => {
+            let regHeight = REGION_BOUNDARIES.y_max - REGION_BOUNDARIES.y_min + 1
+            let regWidth = REGION_BOUNDARIES.x_max - REGION_BOUNDARIES.x_min + 1
+            let tmpHeight = tplCanvas.height; let tmpWidth = tplCanvas.width
+            let tmpImgData = new ImageData(tmpWidth, tmpHeight)
+
+            // Filling in the empty template with white color and maximum alpha values
+            for (let i = 0; i < tmpImgData.data.length; i++) {
+              tmpImgData.data[i] = 255
+            }
+
+            //
+            // Resizing extracted region saving it's aspect ratio, so it could
+            // fit into borders  of  template image,  then centering it within
+            // white image which size is equal to template image's size.
+            //
+            if (tmpWidth === tmpHeight) {
+              if (regWidth === regHeight) {
+                regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tmpWidth, tmpHeight)
+                for (let i2 = 0; i2 < regRescld.data.length; i2 += 4) {
+                  if (regRescld.data[i2] === 0 && regRescld.data[i2 + 1] === 255 && regRescld.data[i2 + 2] === 0) {
+                    /* R */ tmpImgData.data[i2 + 0] = 0
+                    /* G */ tmpImgData.data[i2 + 1] = 0
+                    /* B */ tmpImgData.data[i2 + 2] = 0
+                  } else {
+                    /* R */ tmpImgData.data[i2 + 0] = 255
+                    /* G */ tmpImgData.data[i2 + 1] = 255
+                    /* B */ tmpImgData.data[i2 + 2] = 255
+                  }
+                }
+              } else if (regWidth > regHeight) {
+                let tgtHeight = Math.round(tmpWidth / (regWidth / regHeight))
+                let heightOffset = Math.round((tmpHeight - tgtHeight) / 2)
+
+                regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tmpWidth, tgtHeight)
+                for (let i2 = tmpWidth * heightOffset * 4, i3 = 0; i3 < regRescld.data.length; i3 += 4, i2 += 4) {
+                  if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                    /* R */ tmpImgData.data[i2 + 0] = 0
+                    /* G */ tmpImgData.data[i2 + 1] = 0
+                    /* B */ tmpImgData.data[i2 + 2] = 0
+                  } else {
+                    /* R */ tmpImgData.data[i2 + 0] = 255
+                    /* G */ tmpImgData.data[i2 + 1] = 255
+                    /* B */ tmpImgData.data[i2 + 2] = 255
+                  }
+                }
+              } else if (regWidth < regHeight) {
+                let tgtWidth = Math.round(tmpHeight / (regHeight / regWidth))
+                let widthOffset = Math.round((tmpWidth - tgtWidth) / 2)
+
+                regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tgtWidth, tmpHeight)
+                for (let i2 = 0; i2 < tmpHeight; i2++) {
+                  for (let i3 = i2 * tgtWidth * 4, i4 = (i2 * tmpWidth * 4) + (widthOffset * 4), i5 = 0; i5 < tgtWidth; i5++, i4 += 4, i3 += 4) {
+                    if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                      /* R */ tmpImgData.data[i4 + 0] = 0
+                      /* G */ tmpImgData.data[i4 + 1] = 0
+                      /* B */ tmpImgData.data[i4 + 2] = 0
+                    } else {
+                      /* R */ tmpImgData.data[i4 + 0] = 255
+                      /* G */ tmpImgData.data[i4 + 1] = 255
+                      /* B */ tmpImgData.data[i4 + 2] = 255
+                    }
+                  }
+                }
+              }
+            } else if (tmpWidth > tmpHeight) {
+              if (regWidth === regHeight) {
+                let tgtWidth = Math.round(tmpHeight / (regHeight / regWidth))
+                let widthOffset = Math.round((tmpWidth - tgtWidth) / 2)
+
+                regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tgtWidth, tmpHeight)
+                for (let i2 = 0; i2 < tmpHeight; i2++) {
+                  for (let i3 = i2 * tgtWidth * 4, i4 = (i2 * tmpWidth * 4) + (widthOffset * 4), i5 = 0; i5 < tgtWidth; i5++, i4 += 4, i3 += 4) {
+                    if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                      /* R */ tmpImgData.data[i4 + 0] = 0
+                      /* G */ tmpImgData.data[i4 + 1] = 0
+                      /* B */ tmpImgData.data[i4 + 2] = 0
+                    } else {
+                      /* R */ tmpImgData.data[i4 + 0] = 255
+                      /* G */ tmpImgData.data[i4 + 1] = 255
+                      /* B */ tmpImgData.data[i4 + 2] = 255
+                    }
+                  }
+                }
+              } else if (regWidth > regHeight) {
+                let tgtHeight = Math.round(tmpWidth / (regWidth / regHeight))
+                let heightOffset = Math.round((tmpHeight - tgtHeight) / 2)
+
+                if (tgtHeight > tmpHeight) {
+                  let tgtWidth = Math.round(tmpHeight / (regHeight / regWidth))
+                  let widthOffset = Math.round((tmpWidth - tgtWidth) / 2)
+
+                  regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tgtWidth, tmpHeight)
+                  for (let i2 = 0; i2 < tmpHeight; i2++) {
+                    for (let i3 = i2 * tgtWidth * 4, i4 = (i2 * tmpWidth * 4) + (widthOffset * 4), i5 = 0; i5 < tgtWidth; i5++, i4 += 4, i3 += 4) {
+                      if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                        /* R */ tmpImgData.data[i4 + 0] = 0
+                        /* G */ tmpImgData.data[i4 + 1] = 0
+                        /* B */ tmpImgData.data[i4 + 2] = 0
+                      } else {
+                        /* R */ tmpImgData.data[i4 + 0] = 255
+                        /* G */ tmpImgData.data[i4 + 1] = 255
+                        /* B */ tmpImgData.data[i4 + 2] = 255
+                      }
+                    }
+                  }
+                } else {
+                  regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tmpWidth, tgtHeight)
+                  for (let i2 = tmpWidth * heightOffset * 4, i3 = 0; i3 < regRescld.data.length; i3 += 4, i2 += 4) {
+                    if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                      /* R */ tmpImgData.data[i2 + 0] = 0
+                      /* G */ tmpImgData.data[i2 + 1] = 0
+                      /* B */ tmpImgData.data[i2 + 2] = 0
+                    } else {
+                      /* R */ tmpImgData.data[i2 + 0] = 255
+                      /* G */ tmpImgData.data[i2 + 1] = 255
+                      /* B */ tmpImgData.data[i2 + 2] = 255
+                    }
+                  }
+                }
+              } else if (regWidth < regHeight) {
+                let tgtWidth = Math.round(tmpHeight / (regHeight / regWidth))
+                let widthOffset = Math.round((tmpWidth - tgtWidth) / 2)
+
+                regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tgtWidth, tmpHeight)
+                for (let i2 = 0; i2 < tmpHeight; i2++) {
+                  for (let i3 = i2 * tgtWidth * 4, i4 = (i2 * tmpWidth * 4) + (widthOffset * 4), i5 = 0; i5 < tgtWidth; i5++, i4 += 4, i3 += 4) {
+                    if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                      /* R */ tmpImgData.data[i4 + 0] = 0
+                      /* G */ tmpImgData.data[i4 + 1] = 0
+                      /* B */ tmpImgData.data[i4 + 2] = 0
+                    } else {
+                      /* R */ tmpImgData.data[i4 + 0] = 255
+                      /* G */ tmpImgData.data[i4 + 1] = 255
+                      /* B */ tmpImgData.data[i4 + 2] = 255
+                    }
+                  }
+                }
+              }
+            } else if (tmpWidth < tmpHeight) {
+              if (regWidth === regHeight) {
+                let tgtHeight = Math.round(tmpWidth / (regWidth / regHeight))
+                let heightOffset = Math.round((tmpHeight - tgtHeight) / 2)
+
+                regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tmpWidth, tgtHeight)
+                for (let i2 = tmpWidth * heightOffset * 4, i3 = 0; i3 < regRescld.data.length; i3 += 4, i2 += 4) {
+                  if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                    /* R */ tmpImgData.data[i2 + 0] = 0
+                    /* G */ tmpImgData.data[i2 + 1] = 0
+                    /* B */ tmpImgData.data[i2 + 2] = 0
+                  } else {
+                    /* R */ tmpImgData.data[i2 + 0] = 255
+                    /* G */ tmpImgData.data[i2 + 1] = 255
+                    /* B */ tmpImgData.data[i2 + 2] = 255
+                  }
+                }
+              } else if (regWidth > regHeight) {
+                let tgtHeight = Math.round(tmpWidth / (regWidth / regHeight))
+                let heightOffset = Math.round((tmpHeight - tgtHeight) / 2)
+
+                regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tmpWidth, tgtHeight)
+                for (let i2 = tmpWidth * heightOffset * 4, i3 = 0; i3 < regRescld.data.length; i3 += 4, i2 += 4) {
+                  if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                    /* R */ tmpImgData.data[i2 + 0] = 0
+                    /* G */ tmpImgData.data[i2 + 1] = 0
+                    /* B */ tmpImgData.data[i2 + 2] = 0
+                  } else {
+                    /* R */ tmpImgData.data[i2 + 0] = 255
+                    /* G */ tmpImgData.data[i2 + 1] = 255
+                    /* B */ tmpImgData.data[i2 + 2] = 255
+                  }
+                }
+              } else if (regWidth < regHeight) {
+                let tgtWidth = Math.round(tmpHeight / (regHeight / regWidth))
+                let widthOffset = Math.round((tmpWidth - tgtWidth) / 2)
+
+                if (tgtWidth > tmpWidth) {
+                  let tgtHeight = Math.round(tmpWidth / (regWidth / regHeight))
+                  let heightOffset = Math.round((tmpHeight - tgtHeight) / 2)
+
+                  regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tmpWidth, tgtHeight)
+                  for (let i2 = tmpWidth * heightOffset * 4, i3 = 0; i3 < regRescld.data.length; i3 += 4, i2 += 4) {
+                    if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                      /* R */ tmpImgData.data[i2 + 0] = 0
+                      /* G */ tmpImgData.data[i2 + 1] = 0
+                      /* B */ tmpImgData.data[i2 + 2] = 0
+                    } else {
+                      /* R */ tmpImgData.data[i2 + 0] = 255
+                      /* G */ tmpImgData.data[i2 + 1] = 255
+                      /* B */ tmpImgData.data[i2 + 2] = 255
+                    }
+                  }
+                } else {
+                  regRescld = this.resizeImage(EXTRACTED_REGION_DATA, regWidth, regHeight, tgtWidth, tmpHeight)
+                  for (let i2 = 0; i2 < tmpHeight; i2++) {
+                    for (let i3 = i2 * tgtWidth * 4, i4 = (i2 * tmpWidth * 4) + (widthOffset * 4), i5 = 0; i5 < tgtWidth; i5++, i4 += 4, i3 += 4) {
+                      if (regRescld.data[i3] === 0 && regRescld.data[i3 + 1] === 255 && regRescld.data[i3 + 2] === 0) {
+                        /* R */ tmpImgData.data[i4 + 0] = 0
+                        /* G */ tmpImgData.data[i4 + 1] = 0
+                        /* B */ tmpImgData.data[i4 + 2] = 0
+                      } else {
+                        /* R */ tmpImgData.data[i4 + 0] = 255
+                        /* G */ tmpImgData.data[i4 + 1] = 255
+                        /* B */ tmpImgData.data[i4 + 2] = 255
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            let tp = 0; let tn = 0; let fp = 0; let fn = 0
+            let tplImgData = tplCanvas.getContext('2d').getImageData(0, 0, tmpWidth, tmpHeight)
+            for (let i2 = 0; i2 < tplImgData.data.length; i2 += 4) {
+              if /* Template (black)    Region (black) */ (
+                (tplImgData.data[i2 + 0] === 0 && tmpImgData.data[i2 + 0] === 0) &&
+                (tplImgData.data[i2 + 1] === 0 && tmpImgData.data[i2 + 1] === 0) &&
+                (tplImgData.data[i2 + 2] === 0 && tmpImgData.data[i2 + 2] === 0)
+              ) {
+                tp++
+              } else if /* Template (white)    Region (white) */ (
+                (tplImgData.data[i2 + 0] === 255 && tmpImgData.data[i2 + 0] === 255) &&
+                (tplImgData.data[i2 + 1] === 255 && tmpImgData.data[i2 + 1] === 255) &&
+                (tplImgData.data[i2 + 2] === 255 && tmpImgData.data[i2 + 2] === 255)
+              ) {
+                tn++
+              } else if /* Template (white)    Region (black) */ (
+                (tplImgData.data[i2 + 0] === 255 && tmpImgData.data[i2 + 0] === 0) &&
+                (tplImgData.data[i2 + 1] === 255 && tmpImgData.data[i2 + 1] === 0) &&
+                (tplImgData.data[i2 + 2] === 255 && tmpImgData.data[i2 + 2] === 0)
+              ) {
+                fp++
+              } else if /* Template (black)    Region (white) */ (
+                (tplImgData.data[i2 + 0] === 0 && tmpImgData.data[i2 + 0] === 255) &&
+                (tplImgData.data[i2 + 1] === 0 && tmpImgData.data[i2 + 1] === 255) &&
+                (tplImgData.data[i2 + 2] === 0 && tmpImgData.data[i2 + 2] === 255)
+              ) {
+                fn++
+              }
+            }
+
+            // (TP + TN)/(TP + TN + FP + FN)
+            let result = (tp + tn) / (tp + tn + fp + fn)
+            cpResults.push([ this.templateFiles[i], result ])
+          }
+        )
+      }
+
+      let bestPath = null
+      let bestMatches = []
+      for (let i = 0, j = 0, max = [0, 0]; i < cpResults.length; i++) {
+        if (cpResults[i][1] > max[1]) {
+          max = cpResults[i]
+          j = i
+        }
+
+        if (i === cpResults.length - 1) {
+          if (!bestPath) {
+            bestPath = max[0]
+          }
+
+          bestMatches.push([ max[0].substring(max[0].lastIndexOf('\\') + 1, max[0].length), (max[1] * 100).toFixed(2) ])
+          cpResults.splice(j, 1)
+          max = [0, 0]
+          j = 0
+
+          if (bestMatches.length === 3) {
+            break
+          } else {
+            i = 0
+          }
+        }
+      }
+
+      await this.loadFromPathToCanvas(regCanvas, bestPath)
+      this.$refs.pat1.innerHTML = '&#10004;&nbsp;' + bestMatches[0][0] + '&nbsp;match for:&nbsp;' + bestMatches[0][1] + '%'
+
+      if (bestMatches.length > 1) {
+        this.$refs.pat2.innerHTML = '&#9899;&nbsp;' + bestMatches[1][0] + '&nbsp;match for:&nbsp;' + bestMatches[1][1] + '%'
+      }
+
+      if (bestMatches.length > 2) {
+        this.$refs.pat3.innerHTML = '&#9899;&nbsp;' + bestMatches[2][0] + '&nbsp;match for:&nbsp;' + bestMatches[2][1] + '%'
+      }
     }
   }
 }
@@ -354,8 +652,13 @@ export default {
     padding-bottom: 1em;
     align-items: center;
   }
-  #match-percent {
-    font-weight: 500;
-    text-align: center;
+  .hide-from-user {
+    display: none;
+  }
+  #pat-1, #pat-2, #pat-3 {
+    margin-top: 5px;
+  }
+  #pat-1 {
+    color: #00AA00;
   }
 </style>
