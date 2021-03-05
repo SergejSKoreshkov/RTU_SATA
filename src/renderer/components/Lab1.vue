@@ -361,10 +361,6 @@ export default {
                     /* R */ tmpImgData.data[i2 + 0] = 0
                     /* G */ tmpImgData.data[i2 + 1] = 0
                     /* B */ tmpImgData.data[i2 + 2] = 0
-                  } else {
-                    /* R */ tmpImgData.data[i2 + 0] = 255
-                    /* G */ tmpImgData.data[i2 + 1] = 255
-                    /* B */ tmpImgData.data[i2 + 2] = 255
                   }
                 }
               } else if (regWidth > regHeight) {
@@ -377,10 +373,6 @@ export default {
                     /* R */ tmpImgData.data[i2 + 0] = 0
                     /* G */ tmpImgData.data[i2 + 1] = 0
                     /* B */ tmpImgData.data[i2 + 2] = 0
-                  } else {
-                    /* R */ tmpImgData.data[i2 + 0] = 255
-                    /* G */ tmpImgData.data[i2 + 1] = 255
-                    /* B */ tmpImgData.data[i2 + 2] = 255
                   }
                 }
               } else if (regWidth < regHeight) {
@@ -394,10 +386,6 @@ export default {
                       /* R */ tmpImgData.data[i4 + 0] = 0
                       /* G */ tmpImgData.data[i4 + 1] = 0
                       /* B */ tmpImgData.data[i4 + 2] = 0
-                    } else {
-                      /* R */ tmpImgData.data[i4 + 0] = 255
-                      /* G */ tmpImgData.data[i4 + 1] = 255
-                      /* B */ tmpImgData.data[i4 + 2] = 255
                     }
                   }
                 }
@@ -414,10 +402,6 @@ export default {
                       /* R */ tmpImgData.data[i4 + 0] = 0
                       /* G */ tmpImgData.data[i4 + 1] = 0
                       /* B */ tmpImgData.data[i4 + 2] = 0
-                    } else {
-                      /* R */ tmpImgData.data[i4 + 0] = 255
-                      /* G */ tmpImgData.data[i4 + 1] = 255
-                      /* B */ tmpImgData.data[i4 + 2] = 255
                     }
                   }
                 }
@@ -436,10 +420,6 @@ export default {
                         /* R */ tmpImgData.data[i4 + 0] = 0
                         /* G */ tmpImgData.data[i4 + 1] = 0
                         /* B */ tmpImgData.data[i4 + 2] = 0
-                      } else {
-                        /* R */ tmpImgData.data[i4 + 0] = 255
-                        /* G */ tmpImgData.data[i4 + 1] = 255
-                        /* B */ tmpImgData.data[i4 + 2] = 255
                       }
                     }
                   }
@@ -450,10 +430,6 @@ export default {
                       /* R */ tmpImgData.data[i2 + 0] = 0
                       /* G */ tmpImgData.data[i2 + 1] = 0
                       /* B */ tmpImgData.data[i2 + 2] = 0
-                    } else {
-                      /* R */ tmpImgData.data[i2 + 0] = 255
-                      /* G */ tmpImgData.data[i2 + 1] = 255
-                      /* B */ tmpImgData.data[i2 + 2] = 255
                     }
                   }
                 }
@@ -468,10 +444,6 @@ export default {
                       /* R */ tmpImgData.data[i4 + 0] = 0
                       /* G */ tmpImgData.data[i4 + 1] = 0
                       /* B */ tmpImgData.data[i4 + 2] = 0
-                    } else {
-                      /* R */ tmpImgData.data[i4 + 0] = 255
-                      /* G */ tmpImgData.data[i4 + 1] = 255
-                      /* B */ tmpImgData.data[i4 + 2] = 255
                     }
                   }
                 }
@@ -487,10 +459,6 @@ export default {
                     /* R */ tmpImgData.data[i2 + 0] = 0
                     /* G */ tmpImgData.data[i2 + 1] = 0
                     /* B */ tmpImgData.data[i2 + 2] = 0
-                  } else {
-                    /* R */ tmpImgData.data[i2 + 0] = 255
-                    /* G */ tmpImgData.data[i2 + 1] = 255
-                    /* B */ tmpImgData.data[i2 + 2] = 255
                   }
                 }
               } else if (regWidth > regHeight) {
@@ -503,10 +471,6 @@ export default {
                     /* R */ tmpImgData.data[i2 + 0] = 0
                     /* G */ tmpImgData.data[i2 + 1] = 0
                     /* B */ tmpImgData.data[i2 + 2] = 0
-                  } else {
-                    /* R */ tmpImgData.data[i2 + 0] = 255
-                    /* G */ tmpImgData.data[i2 + 1] = 255
-                    /* B */ tmpImgData.data[i2 + 2] = 255
                   }
                 }
               } else if (regWidth < regHeight) {
@@ -523,10 +487,6 @@ export default {
                       /* R */ tmpImgData.data[i2 + 0] = 0
                       /* G */ tmpImgData.data[i2 + 1] = 0
                       /* B */ tmpImgData.data[i2 + 2] = 0
-                    } else {
-                      /* R */ tmpImgData.data[i2 + 0] = 255
-                      /* G */ tmpImgData.data[i2 + 1] = 255
-                      /* B */ tmpImgData.data[i2 + 2] = 255
                     }
                   }
                 } else {
@@ -537,10 +497,6 @@ export default {
                         /* R */ tmpImgData.data[i4 + 0] = 0
                         /* G */ tmpImgData.data[i4 + 1] = 0
                         /* B */ tmpImgData.data[i4 + 2] = 0
-                      } else {
-                        /* R */ tmpImgData.data[i4 + 0] = 255
-                        /* G */ tmpImgData.data[i4 + 1] = 255
-                        /* B */ tmpImgData.data[i4 + 2] = 255
                       }
                     }
                   }
