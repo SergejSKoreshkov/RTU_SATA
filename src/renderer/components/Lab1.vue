@@ -20,7 +20,7 @@
           width="200"
           height="100"
         ></canvas>
-        <button @click="openImage">Load image</button>
+        <button class="btn btn-primary" @click="openImage">Load image</button>
       </div>
       <div class="col-4">
         <canvas
@@ -69,8 +69,8 @@
         <div id='pat-3' ref='pat3'></div>
       </div>
     </div>
-    <button @click='loadDirectory'>Select template images</button>
-    <button @click='compareRegionTemplates'>Compare Images</button>
+    <button class="btn btn-primary" @click='loadDirectory'>Select template images</button>
+    <button class="btn btn-warning" @click='compareRegionTemplates' :disabled="!templateFiles">Compare Images</button>
   </div>
 </template>
 
@@ -329,7 +329,7 @@ export default {
       if (!this.templateFiles || !EXTRACTED_REGION_DATA) {
         return
       }
-
+      this.loading = true
       let cpResults = []
       let tplCanvas = this.$refs.templateCanvas
       let regCanvas = this.$refs.matchedPattern
@@ -577,6 +577,8 @@ export default {
       if (bestMatches.length > 2) {
         this.$refs.pat3.innerHTML = '&#9899;&nbsp;' + bestMatches[2][0] + '&nbsp;match for:&nbsp;' + bestMatches[2][1] + '%'
       }
+
+      this.loading = false
     }
   }
 }
