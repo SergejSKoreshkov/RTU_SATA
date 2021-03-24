@@ -44,6 +44,7 @@ const { dialog } = require('electron').remote
 const { openImage } = require('./LoadImage').default
 const { regionGrow, extractRegion } = require('./RegionGrow').default
 const { vectorTo2DMatrix, matrix2DToVector } = require('./Helpers').default
+const { mooreNeighborTrace } = require('./MooreNeighborTracing').default
 
 export default {
   name: 'lab2',
@@ -75,7 +76,8 @@ export default {
         // Result vector is the same as extractedRegion
         // matrix is [width]x[height] array with { r, g, b, a } values
         // For example matrix[w][h].r is red, matrix[w][h].g green ...
-        const matrix = vectorTo2DMatrix(extractedRegion)
+        let matrix = vectorTo2DMatrix(extractedRegion)
+        mooreNeighborTrace(matrix, x - regionBoundaries.x_min, y - regionBoundaries.y_min)
         const vector = matrix2DToVector(matrix)
 
         const regionCanvas = this.$refs.canvasExtractedRegion

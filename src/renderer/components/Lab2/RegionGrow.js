@@ -26,8 +26,8 @@ function regionGrow (t, canvas, imageData, point) {
     const nowIntensity = imageData.data[pixelCoordinates]
     if (
       startIntensity - t < nowIntensity &&
-        startIntensity + t > nowIntensity &&
-        !used[pixelCoordinates]
+      startIntensity + t > nowIntensity &&
+      !used[pixelCoordinates]
     ) {
       used[pixelCoordinates] = true
 
