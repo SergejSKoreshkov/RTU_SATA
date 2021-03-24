@@ -54,6 +54,10 @@ export default {
     }
   },
   mounted () {
+    const myScript = document.createElement('script')
+    myScript.setAttribute('src', 'https://docs.opencv.org/master/opencv.js')
+    document.body.appendChild(myScript)
+    myScript.addEventListener('load', () => console.log('CV READY'), false)
   },
   methods: {
     canvasClick (event) {
@@ -76,9 +80,10 @@ export default {
         // Result vector is the same as extractedRegion
         // matrix is [width]x[height] array with { r, g, b, a } values
         // For example matrix[w][h].r is red, matrix[w][h].g green ...
-        let matrix = vectorTo2DMatrix(extractedRegion)
-        mooreNeighborTrace(matrix, x - regionBoundaries.x_min, y - regionBoundaries.y_min)
-        const vector = matrix2DToVector(matrix)
+        const matrix = vectorTo2DMatrix(extractedRegion)
+        const objectBordersMatrix = vectorTo2DMatrix(new ImageData(extractedRegion.width, extractedRegion.height))
+        mooreNeighborTrace(matrix, objectBordersMatrix)
+        const vector = matrix2DToVector(objectBordersMatrix)
 
         const regionCanvas = this.$refs.canvasExtractedRegion
         const regionCtx = regionCanvas.getContext('2d')
