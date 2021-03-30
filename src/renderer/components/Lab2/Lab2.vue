@@ -36,6 +36,19 @@
         ></canvas>
       </div>
     </div>
+    <div class="row">
+      <div class="col-4">
+        <h4>Open CV Test</h4>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-4">
+        <canvas
+          ref="openCvCanvas"
+          id="openCvCanvas"
+        ></canvas>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -46,6 +59,8 @@ const { regionGrow, extractRegion } = require('./RegionGrow').default
 const { vectorTo2DMatrix, matrix2DToVector } = require('./Helpers').default
 const { mooreNeighborTrace } = require('./MooreNeighborTracing').default
 
+let cv = null
+
 export default {
   name: 'lab2',
   data () {
@@ -54,12 +69,57 @@ export default {
     }
   },
   mounted () {
-    const myScript = document.createElement('script')
-    myScript.setAttribute('src', 'https://docs.opencv.org/master/opencv.js')
-    document.body.appendChild(myScript)
-    myScript.addEventListener('load', () => console.log('CV READY'), false)
+    this.loading = true
+    const openCvScript = document.createElement('script')
+    openCvScript.setAttribute('src', '/static/js/opencv.js')
+    document.body.appendChild(openCvScript)
+    openCvScript.addEventListener('load', () => {
+      console.log('OPEN CV READY')
+      cv = window.module.exports
+      this.loading = false
+    }, false)
   },
   methods: {
+    canvasToCvToCanvas () {
+      const srcCanvas = this.$refs.canvasExtractedRegion
+      const srcCtx = srcCanvas.getContext('2d')
+      const imgData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height)
+
+      const src = cv.matFromImageData(imgData)
+
+      const imgGray = new cv.Mat()
+      const imgColor = new cv.Mat()
+      cv.cvtColor(src, imgGray, cv.COLOR_RGBA2GRAY)
+      cv.cvtColor(src, imgColor, cv.COLOR_RGBA2RGB)
+      src.delete()
+      const dst = cv.Mat.zeros(imgColor.cols, imgColor.rows, cv.CV_32FC1)
+      /// Detector parameters
+      const thresh = 100
+      const blockSize = 8
+      const apertureSize = 3
+      const k = 0.04
+      /// Detecting corners
+      cv.cornerHarris(imgGray, dst, blockSize, apertureSize, k, cv.BORDER_DEFAULT)
+      /// Normalizing
+      const dstNorm = new cv.Mat()
+      const dstNormScaled = new cv.Mat()
+      cv.normalize(dst, dstNorm, 0, 255, 32, cv.CV_32FC1, new cv.Mat())
+      cv.convertScaleAbs(dstNorm, dstNormScaled, 1, 0)
+      /// Drawing a circle around corners
+      for (let j = 0; j < dstNorm.rows; j++) {
+        for (let i = 0; i < dstNorm.cols; i++) {
+          if (dstNorm.floatAt(j, i) > thresh) {
+            cv.circle(dstNormScaled, new cv.Point(i, j), 3, new cv.Scalar(255, 0, 0, 255), 1)
+          }
+        }
+      }
+      cv.imshow('openCvCanvas', dstNormScaled)
+      dst.delete()
+      dstNorm.delete()
+      dstNormScaled.delete()
+      imgGray.delete()
+      imgColor.delete()
+    },
     canvasClick (event) {
       this.loading = true
       setTimeout(() => {
@@ -90,6 +150,12 @@ export default {
         regionCanvas.height = vector.height
         regionCanvas.width = vector.width
         regionCtx.putImageData(vector, 0, 0)
+
+        // CV module loads in async. Better to check, if it's ready
+        if (cv) {
+          this.canvasToCvToCanvas()
+        }
+
         this.loading = false
       }, 100)
     },
