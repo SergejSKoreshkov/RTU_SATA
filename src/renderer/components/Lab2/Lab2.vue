@@ -50,8 +50,9 @@
         ></canvas>
       </div>
       <div class="col-4">
-        <div id="thresholdIdent">Threshold: 100</div>
-        <input type="range" min="1" max="100" value="100" id="thresholdSlider" @change="sliderChange">
+        <div id="thresholdIdent">Threshold: {{ sliderValue }}</div>
+        <input type="range" min="1" max="150" v-model="sliderValue" @change="sliderChange">
+        <div id="thresholdIdent">Result: {{ result }}</div>
       </div>
     </div>
   </div>
@@ -71,7 +72,9 @@ export default {
   data () {
     return {
       img_loaded: false,
-      loading: false
+      loading: false,
+      sliderValue: 100,
+      result: ''
     }
   },
   mounted () {
@@ -86,7 +89,7 @@ export default {
     }, false)
   },
   methods: {
-    canvasToCvToCanvas () {
+    async canvasToCvToCanvas () {
       const srcCanvas = this.$refs.canvasExtractedRegion
       const srcCtx = srcCanvas.getContext('2d')
       const imgData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height)
@@ -101,7 +104,7 @@ export default {
       src.delete()
       const dst = cv.Mat.zeros(imgColor.cols, imgColor.rows, cv.CV_32FC1)
       /// Detector parameters
-      const thresh = document.getElementById('thresholdSlider').value
+      const thresh = this.sliderValue
       const blockSize = 4
       const apertureSize = 3
       const k = 0.04
@@ -119,64 +122,116 @@ export default {
       for (let j = 0; j < dstNorm.rows; j++) {
         for (let i = 0; i < dstNorm.cols; i++) {
           if (dstNorm.floatAt(j, i) > thresh) {
-            /* ----------------------------------------------------------------------
-            if (stack.length === 0) {
-              stack.push([j, i])
-            } else {
-              let pt = stack[stack.length - 1]
-              let distance = Math.sqrt(Math.pow(pt[0] - j, 2) + Math.pow(pt[1] - i, 2))
-
-              if (distance > 5) {
-                let avgPix = this.getAveragePointCoord(stack)
-                cv.circle(dstNormScaled, new cv.Point(avgPix[1], avgPix[0]), 3, new cv.Scalar(255, 0, 0, 255), 1)
-                console.log(stack, 'AveragePIX: ', avgPix)
-                stack = [ ]
-              } else {
-                stack.push([j, i])
-              }
-            }
-            ------------------------------------------------------------------------ */
             stack.push([j, i])
           }
         }
       }
 
-      // let avgPix = this.getAveragePointCoord(stack)
-      // cv.circle(dstNormScaled, new cv.Point(avgPix[1], avgPix[0]), 3, new cv.Scalar(255, 0, 0, 255), 1)
-      // console.log(stack, 'AveragePIX: ', avgPix)
+      if (stack.length < 1000) {
+        let res = [ ]
+        let tmpStack = [ stack[0] ]
+        stack.splice(0, 1)
+        while (stack.length > 0) {
+          for (let i = 0; i < stack.length; i++) {
+            let pt = tmpStack[tmpStack.length - 1]
+            let distance = Math.sqrt(Math.pow(pt[0] - stack[i][0], 2) + Math.pow(pt[1] - stack[i][1], 2))
 
-      let res = [ ]
-      let tmpStack = [ stack[0] ]
-      stack.splice(0, 1)
-      while (stack.length > 0) {
-        for (let i = 0; i < stack.length; i++) {
-          let pt = tmpStack[tmpStack.length - 1]
-          let distance = Math.sqrt(Math.pow(pt[0] - stack[i][0], 2) + Math.pow(pt[1] - stack[i][1], 2))
+            if (distance < 20) {
+              tmpStack.push(stack[i])
+              stack.splice(i, 1)
+              i--
+            }
+          }
 
-          if (distance < 10) {
-            tmpStack.push(stack[i])
-            stack.splice(i, 1)
-            i--
+          let avgPt = this.getAveragePointCoord(tmpStack)
+          res.push(avgPt)
+
+          tmpStack = [stack[0]]
+          stack.splice(0, 1)
+        }
+        cv.cvtColor(dstNormScaled, dstNormScaled, cv.COLOR_GRAY2RGB)
+        for (let i = 0; i < res.length; i++) {
+          cv.circle(imgColor, new cv.Point(res[i][1], res[i][0]), 3, new cv.Scalar(255, 0, 0, 255), 1)
+        }
+        const contour = []
+        // JARVIS
+        const fns = [
+          [Math.atan2, (a, b) => a.y - b.y || a.x - b.x],
+          [(x, y) => Math.atan2(-x, -y), (a, b) => b.y - a.y || b.x - a.x]
+        ]
+        for (let i = 0; i < fns.length; i++) {
+          const [angleFn, sortFn] = fns[i]
+          const mappedPoints = res.map(([y, x]) => ({ x, y: srcCanvas.height - y }))
+          if (mappedPoints.length < 3) return
+          let sorted = mappedPoints.sort(sortFn)
+          let [pointNow, ...restPoints] = sorted
+          const lastPoint = {...restPoints[restPoints.length - 1]}
+          while (!(pointNow.x === lastPoint.x && pointNow.y === lastPoint.y)) {
+            restPoints = restPoints.map(({ x, y }) => {
+              const ix = x - pointNow.x
+              const iy = y - pointNow.y
+              let angle = angleFn(iy, ix)
+              if (angle < 0) angle = 2 * Math.PI + angle
+              return { x, y, a: angle }
+            }).sort((a, b) => a.a - b.a)
+            pointNow = restPoints.splice(0, 1)[0]
+            contour.push({ x: pointNow.x, y: srcCanvas.height - pointNow.y })
           }
         }
+        let font = 0
+        const angles = contour.map((el, index, arr) => {
+          const pointA = el
+          const pointB = index === arr.length - 1 ? arr[0] : arr[index + 1]
+          const potinC = index === 0 ? arr[arr.length - 1] : arr[index - 1]
+          const a = Math.sqrt(Math.pow(pointB.x - potinC.x, 2) + Math.pow(pointB.y - potinC.y, 2))
+          const b = Math.sqrt(Math.pow(pointB.x - pointA.x, 2) + Math.pow(pointB.y - pointA.y, 2))
+          const c = Math.sqrt(Math.pow(potinC.x - pointA.x, 2) + Math.pow(potinC.y - pointA.y, 2))
+          const angle = Math.round(Math.acos((b * b + c * c - a * a) / (2 * b * c)) * 180 / Math.PI)
 
-        let avgPt = this.getAveragePointCoord(tmpStack)
-        res.push(avgPt)
+          const result = { ...pointA }
+          if (result.y < 15) result.y = 15
+          if (result.x > srcCanvas.width - 60) result.x = srcCanvas.width - 60
+          if (res.length <= 9) {
+            cv.putText(imgColor, `${index + 1} (${angle})`, new cv.Point(result.x, result.y), font, 0.5, new cv.Scalar(255, 255, 0, 255), 1.5, cv.LINE_AA)
+          }
+          return angle
+        })
 
-        tmpStack = [stack[0]]
-        stack.splice(0, 1)
-      }
+        this.result = ''
+        if (angles.length === 3) {
+          if (angles.every(el => el === 60 || el === 59 || el === 61)) this.result += 'Equilateral '
+          if (
+            Math.abs(angles[0] - angles[1]) < 2 ||
+          Math.abs(angles[1] - angles[2]) < 2 ||
+          Math.abs(angles[2] - angles[0]) < 2
+          ) this.result += 'Isosceles '
+          if (angles.some(el => el === 90 || el === 91 || el === 89)) this.result += 'Right-angle '
+          this.result += 'Triangle'
+        } else if (angles.length === 4) {
+          const d1 = Math.sqrt(Math.pow(contour[0].x - contour[2].x, 2) + Math.pow(contour[0].y - contour[2].y, 2))
+          const d2 = Math.sqrt(Math.pow(contour[1].x - contour[3].x, 2) + Math.pow(contour[1].y - contour[3].y, 2))
 
-      let font = 0
-      console.log(res)
-      for (let i = 0; i < res.length; i++) {
-        cv.circle(dstNormScaled, new cv.Point(res[i][1], res[i][0]), 3, new cv.Scalar(255, 0, 0, 255), 1)
-        if (res.length <= 7) {
-          cv.putText(dstNormScaled, (i + 1).toString(), new cv.Point(res[i][1], res[i][0]), font, 0.5, new cv.Scalar(0, 255, 0, 255), 2, cv.LINE_AA)
+          if (angles.every(el => el === 90 || el === 91 || el === 89)) {
+            if (
+              Math.abs(srcCanvas.height - srcCanvas.width) < 2
+            ) this.result += 'Square'
+            else this.result += 'Rectangle'
+          } else if (Math.abs(angles[0] - angles[2]) < 2 || Math.abs(angles[1] - angles[3]) < 2) this.result += 'Diamond'
+          else if (angles.filter(el => Math.abs(90 - el) < 2).length === 2) this.result += 'Right-angle trapezoid'
+          else if (Math.abs(d1 - d2) < 3) this.result += 'Isosceles trapezoid'
+          else this.result += 'Trapezoid'
+        } else if (angles.length > 4 && angles.length <= 9) {
+          this.result += `${angles.length} angle figure`
         }
+      } else {
+        this.result = ''
+        if (
+          Math.abs(srcCanvas.height - srcCanvas.width) < 2
+        ) this.result += 'Circle'
+        else this.result += 'Ellipse'
       }
 
-      cv.imshow('openCvCanvas', dstNormScaled)
+      cv.imshow('openCvCanvas', imgColor)
       dst.delete()
       dstNorm.delete()
       dstNormScaled.delete()
@@ -211,9 +266,9 @@ export default {
 
         const regionCanvas = this.$refs.canvasExtractedRegion
         const regionCtx = regionCanvas.getContext('2d')
-        regionCanvas.height = vector.height
-        regionCanvas.width = vector.width
-        regionCtx.putImageData(vector, 0, 0)
+        regionCanvas.height = vector.height + 20
+        regionCanvas.width = vector.width + 20
+        regionCtx.putImageData(vector, 10, 10)
 
         // CV module loads in async. Better to check, if it's ready
         if (cv) {
@@ -224,10 +279,6 @@ export default {
       }, 100)
     },
     sliderChange () {
-      let slider = document.getElementById('thresholdSlider')
-      let indicator = document.getElementById('thresholdIdent')
-      indicator.innerHTML = 'Threshold: ' + slider.value
-
       if (this.img_loaded !== false) {
         this.canvasToCvToCanvas()
       }
