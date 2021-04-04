@@ -51,6 +51,19 @@ function mooreNeighborTrace (srcImgM, destImgM) {
       cN = (cN + 1) % nB.length
     }
   } while (!(cP[0] === sP[0] && cP[1] === sP[1]))
+
+  // Black and white instead of green and white ...
+  // for (let x = 0; x < destImgM.length; x++) {
+  //   for (let y = 0; y < destImgM[0].length; y++) {
+  //     if (destImgM[x][y].r === 0 && destImgM[x][y].g === 255) {
+  //       console.log('+')
+  //       destImgM[x][y].r = 0
+  //       destImgM[x][y].g = 0
+  //       destImgM[x][y].b = 0
+  //       destImgM[x][y].a = 255
+  //     }
+  //   }
+  // }
 }
 
 export default {

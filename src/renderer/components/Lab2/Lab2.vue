@@ -33,6 +33,7 @@
       <div class="col-4">
         <canvas
           ref="canvasExtractedRegion"
+          id='canvasExtractedRegion'
         ></canvas>
       </div>
     </div>
@@ -47,6 +48,10 @@
           ref="openCvCanvas"
           id="openCvCanvas"
         ></canvas>
+      </div>
+      <div class="col-4">
+        <div id="thresholdIdent">Threshold: 100</div>
+        <input type="range" min="1" max="100" value="100" id="thresholdSlider" @change="sliderChange">
       </div>
     </div>
   </div>
@@ -65,6 +70,7 @@ export default {
   name: 'lab2',
   data () {
     return {
+      img_loaded: false,
       loading: false
     }
   },
@@ -86,6 +92,7 @@ export default {
       const imgData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height)
 
       const src = cv.matFromImageData(imgData)
+      cv.imshow('canvasExtractedRegion', src)
 
       const imgGray = new cv.Mat()
       const imgColor = new cv.Mat()
@@ -94,8 +101,8 @@ export default {
       src.delete()
       const dst = cv.Mat.zeros(imgColor.cols, imgColor.rows, cv.CV_32FC1)
       /// Detector parameters
-      const thresh = 100
-      const blockSize = 8
+      const thresh = document.getElementById('thresholdSlider').value
+      const blockSize = 4
       const apertureSize = 3
       const k = 0.04
       /// Detecting corners
@@ -105,20 +112,77 @@ export default {
       const dstNormScaled = new cv.Mat()
       cv.normalize(dst, dstNorm, 0, 255, 32, cv.CV_32FC1, new cv.Mat())
       cv.convertScaleAbs(dstNorm, dstNormScaled, 1, 0)
+
+      // let avgd_pixs = [ ]
+      let stack = [ ]
       /// Drawing a circle around corners
       for (let j = 0; j < dstNorm.rows; j++) {
         for (let i = 0; i < dstNorm.cols; i++) {
           if (dstNorm.floatAt(j, i) > thresh) {
-            cv.circle(dstNormScaled, new cv.Point(i, j), 3, new cv.Scalar(255, 0, 0, 255), 1)
+            /* ----------------------------------------------------------------------
+            if (stack.length === 0) {
+              stack.push([j, i])
+            } else {
+              let pt = stack[stack.length - 1]
+              let distance = Math.sqrt(Math.pow(pt[0] - j, 2) + Math.pow(pt[1] - i, 2))
+
+              if (distance > 5) {
+                let avgPix = this.getAveragePointCoord(stack)
+                cv.circle(dstNormScaled, new cv.Point(avgPix[1], avgPix[0]), 3, new cv.Scalar(255, 0, 0, 255), 1)
+                console.log(stack, 'AveragePIX: ', avgPix)
+                stack = [ ]
+              } else {
+                stack.push([j, i])
+              }
+            }
+            ------------------------------------------------------------------------ */
+            stack.push([j, i])
           }
         }
       }
+
+      // let avgPix = this.getAveragePointCoord(stack)
+      // cv.circle(dstNormScaled, new cv.Point(avgPix[1], avgPix[0]), 3, new cv.Scalar(255, 0, 0, 255), 1)
+      // console.log(stack, 'AveragePIX: ', avgPix)
+
+      let res = [ ]
+      let tmpStack = [ stack[0] ]
+      stack.splice(0, 1)
+      while (stack.length > 0) {
+        for (let i = 0; i < stack.length; i++) {
+          let pt = tmpStack[tmpStack.length - 1]
+          let distance = Math.sqrt(Math.pow(pt[0] - stack[i][0], 2) + Math.pow(pt[1] - stack[i][1], 2))
+
+          if (distance < 10) {
+            tmpStack.push(stack[i])
+            stack.splice(i, 1)
+            i--
+          }
+        }
+
+        let avgPt = this.getAveragePointCoord(tmpStack)
+        res.push(avgPt)
+
+        tmpStack = [stack[0]]
+        stack.splice(0, 1)
+      }
+
+      let font = 0
+      console.log(res)
+      for (let i = 0; i < res.length; i++) {
+        cv.circle(dstNormScaled, new cv.Point(res[i][1], res[i][0]), 3, new cv.Scalar(255, 0, 0, 255), 1)
+        if (res.length <= 7) {
+          cv.putText(dstNormScaled, (i + 1).toString(), new cv.Point(res[i][1], res[i][0]), font, 0.5, new cv.Scalar(0, 255, 0, 255), 2, cv.LINE_AA)
+        }
+      }
+
       cv.imshow('openCvCanvas', dstNormScaled)
       dst.delete()
       dstNorm.delete()
       dstNormScaled.delete()
       imgGray.delete()
       imgColor.delete()
+      this.img_loaded = true
     },
     canvasClick (event) {
       this.loading = true
@@ -158,6 +222,33 @@ export default {
 
         this.loading = false
       }, 100)
+    },
+    sliderChange () {
+      let slider = document.getElementById('thresholdSlider')
+      let indicator = document.getElementById('thresholdIdent')
+      indicator.innerHTML = 'Threshold: ' + slider.value
+
+      if (this.img_loaded !== false) {
+        this.canvasToCvToCanvas()
+      }
+    },
+    getAveragePointCoord (stack) {
+      let maxX = Number.MIN_SAFE_INTEGER
+      let minX = Number.MAX_SAFE_INTEGER
+      let maxY = Number.MIN_SAFE_INTEGER
+      let minY = Number.MAX_SAFE_INTEGER
+
+      for (let i = 0; i < stack.length; i++) {
+        // Min / Max X
+        if (stack[i][0] > maxX) maxX = stack[i][0]
+        if (stack[i][0] < minX) minX = stack[i][0]
+
+        // Min / Max Y
+        if (stack[i][1] > maxY) maxY = stack[i][1]
+        if (stack[i][1] < minY) minY = stack[i][1]
+      }
+
+      return [maxX - Math.floor((maxX - minX) / 2), maxY - Math.floor((maxY - minY) / 2)]
     },
     openImage () {
       this.loading = true
